@@ -6,7 +6,7 @@
 
 from copy import copy
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable, Sequence
 
 from django.core.exceptions import ImproperlyConfigured
 from environ import Env  # type: ignore
@@ -70,14 +70,14 @@ if log_level not in log_level_choices:
 
 # Django REST Framework settings
 
-REST_FRAMEWORK = {
+REST_FRAMEWORK: dict[str, Any] = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "DEFAULT_AUTHENTICATION_CLASSES": ["knox.auth.TokenAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "PAGE_SIZE": env("API_RESPONSE_PAGINATION_SIZE")
 }
-REST_KNOX = {
+REST_KNOX: dict[str, Any] = {
     "AUTO_REFRESH": True,
     "MIN_REFRESH_INTERVAL": env("AUTH_TOKEN_MINIMUM_REFRESH_INTERVAL")
 }
@@ -86,7 +86,7 @@ REST_KNOX = {
 # Logging settings
 
 # noinspection SpellCheckingInspection
-LOGGING = {
+LOGGING: dict[str, Any] = {
     "version": 1,
     "formatters": {
         "smartserve": {
@@ -118,18 +118,18 @@ LOGGING = {
 
 # Web Server settings
 
-WSGI_APPLICATION = "core.wsgi.application"
-ROOT_URLCONF = "core.urls"
-SECRET_KEY = env("SECRET_KEY")  # NOTE: Security Warning - The secret key is used for important secret stuff (keep the one used in production a secret!)
-STATIC_ROOT = "/staticfiles/"
-STATIC_URL = "static/"
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
+WSGI_APPLICATION: str = "core.wsgi.application"
+ROOT_URLCONF: str = "core.urls"
+SECRET_KEY: str = env("SECRET_KEY")  # NOTE: Security Warning - The secret key is used for important secret stuff (keep the one used in production a secret!)
+STATIC_ROOT: str = "/staticfiles/"
+STATIC_URL: str = "static/"
+CSRF_COOKIE_SECURE: bool = True
+SESSION_COOKIE_SECURE: bool = True
 
 
 # Application Definition
 
-INSTALLED_APPS = [
+INSTALLED_APPS: Sequence[str] = [
     "smartserve",
     "django.contrib.admindocs",
     "django.contrib.admin",
@@ -141,7 +141,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "knox"
 ]
-MIDDLEWARE = [
+MIDDLEWARE: Sequence[str] = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -154,7 +154,7 @@ MIDDLEWARE = [
 
 # Template settings
 
-TEMPLATES = [
+TEMPLATES: Sequence[dict[str, Any]] = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [BASE_DIR / "templates"],
@@ -173,18 +173,18 @@ TEMPLATES = [
 
 # Database settings
 
-DATABASES = {
+DATABASES: dict[str, dict[str, str]] = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
     }
 }
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+DEFAULT_AUTO_FIELD: str = "django.db.models.BigAutoField"
 
 
-# Password Validation settings
+# Authentication settings
 
-AUTH_PASSWORD_VALIDATORS = [
+AUTH_PASSWORD_VALIDATORS: Sequence[dict[str, Any]] = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
         "OPTIONS": {
@@ -202,11 +202,12 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
+AUTH_USER_MODEL: str = "smartserve.User"
 
 
 # Internationalization, Language & Time settings
 
-LANGUAGE_CODE = "en-gb"
-TIME_ZONE = "Europe/London"
-USE_I18N = True
-USE_TZ = True
+LANGUAGE_CODE: str = "en-gb"
+TIME_ZONE: str = "Europe/London"
+USE_I18N: bool = True
+USE_TZ: bool = True
