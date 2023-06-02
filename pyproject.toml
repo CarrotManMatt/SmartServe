@@ -19,6 +19,7 @@ django = "^4.2"
 djangorestframework = "^3.14.0"
 django-rest-knox = "^4.2.0"
 django-environ = "^0.10.0"
+django-admin-rangefilter = "^0.10.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.2.0"
@@ -27,6 +28,19 @@ djangorestframework-stubs = {extras = ["compatible-mypy"], version = "^3.14.0"}
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+warn_unused_configs = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_def = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+no_implicit_reexport = true
+strict_equality = true
+strict_concatenate = true
+ignore_missing_imports = true
 
 [tool.django-stubs]
 django_settings_module = "core.settings"

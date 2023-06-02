@@ -1,11 +1,17 @@
 """
     Utility classes & functions provided for all models within smartserve app.
 """
+
+import uuid
 from typing import Any, Collection, Self
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRel, GenericRelation
 from django.db import models
 from django.db.models import ForeignObjectRel, ManyToManyField, ManyToManyRel, ManyToOneRel, Model
+
+
+def generate_employee_id() -> str:
+    return str(uuid.uuid4().int)[:6]
 
 
 class Custom_Base_Model(Model):

@@ -2,17 +2,21 @@
     Admin configurations for models in smartserve app.
 """
 
-from typing import Sequence, Type
+from typing import Type
 
 from django.contrib import admin, auth
 from django.contrib.auth.admin import UserAdmin
-from django.forms import BaseModelForm
+from django.forms import ModelForm
+from django.utils.translation import gettext_lazy as _
+from rangefilter.filters import DateTimeRangeFilterBuilder
 
+from admin_inlines import Auth_Tokens_Inline
+from smartserve.admin_filters import Group_List_Filter, Staff_List_Filter, User_Is_Active_List_Filter
 from smartserve.models import User
 
-admin.site.site_header = "SmartServe Administration"
-admin.site.site_title = "SmartServe Admin"
-admin.site.index_title = "Overview"
+admin.site.site_header = f"""SmartServe {_("Administration")}"""
+admin.site.site_title = f"""SmartServe {_("Admin")}"""
+admin.site.index_title = _("Overview")
 admin.site.empty_value_display = "- - - - -"
 
 
@@ -24,11 +28,11 @@ class Custom_User_Admin(UserAdmin):
         list, create & update pages.
     """
 
-    date_hierarchy: str = "date_joined"
-    filter_horizontal: Sequence[str] = ["user_permissions"]
-    fieldsets: Sequence[tuple[str | None, dict[str, Sequence[str | Sequence[str]]]]] = (
+    date_hierarchy = "date_joined"
+    filter_horizontal = ("user_permissions",)
+    fieldsets = (
         (None, {
-            "fields": ("username", ("first_name", "last_name"), "is_active")
+            "fields": ("employee_id", ("first_name", "last_name"), "is_active")
         }),
         ("Authentication", {
             "fields": ("display_date_joined", "display_last_login", "password"),
@@ -44,12 +48,11 @@ class Custom_User_Admin(UserAdmin):
             "classes": ("collapse",)
         })
     )
-    add_fieldsets: Sequence[tuple[str | None, dict[str, Sequence[str | Sequence[str]]]]] = (
+    add_fieldsets = (
         (None, {
             "fields": (
-                "username",
-                ("password1", "password2"),
-                ("first_name", "last_name")
+                ("first_name", "last_name"),
+                ("password1", "password2")
             )
         }),
         ("Extra", {
@@ -66,35 +69,38 @@ class Custom_User_Admin(UserAdmin):
             "classes": ("collapse",)
         })
     )
-    list_display: Sequence[str] = (
-        "username",
+    inlines = (Auth_Tokens_Inline,)
+    list_display = (
+        "employee_id",
         "first_name",
         "last_name",
         "is_staff",
         "is_active"
     )
-    list_display_links: Sequence[str] = ("username",)
-    list_editable: Sequence[str] = (
+    list_display_links = ("employee_id",)
+    list_editable = (
         "first_name",
         "last_name",
         "is_staff",
         "is_active"
     )
-    list_filter: Sequence[admin.ListFilter | tuple[str, admin.ListFilter]] = (
-        StaffListFilter,
-        GroupListFilter,
-        UserIsActiveListFilter,
-        ("date_joined", DateTimeRangeFilter),
-        ("last_login", DateTimeRangeFilter)
+    list_filter = (
+        Staff_List_Filter,
+        Group_List_Filter,
+        User_Is_Active_List_Filter,
+        ("date_joined", DateTimeRangeFilterBuilder(title=_("Date Joined"))),
+        ("last_login", DateTimeRangeFilterBuilder(title=_("Last Login")))
     )
-    autocomplete_fields: Sequence[str] = ("groups",)
-    readonly_fields: Sequence[str] = (
+    autocomplete_fields = ("groups",)
+    readonly_fields = (
+        "employee_id",
         "password",
         "display_date_joined",
         "display_last_login"
     )
-    search_fields: Sequence[str] = ("username", "first_name", "last_name")
-    search_help_text = "Search for a username, first name or last name"
+    search_fields = ("employee_id", "first_name", "last_name")
+    ordering = ("first_name", "last_name")
+    search_help_text = _("Search for an employee ID, first name or last name")
 
     @admin.display(description="Date joined", ordering="date_joined")
     def display_date_joined(self, obj: User) -> str:
@@ -112,9 +118,12 @@ class Custom_User_Admin(UserAdmin):
             last_login field, to be displayed on the admin page.
         """
 
+        if not obj.last_login:
+            return ""
+
         return obj.last_login.strftime("%d %b %Y %I:%M:%S %p")
 
-    def get_form(self, *args, **kwargs) -> Type[BaseModelForm]:
+    def get_form(self, *args, **kwargs) -> Type[ModelForm]:
         """
             Return a Form class for use in the admin add view. This is used by
             add_view and change_view.
@@ -124,7 +133,7 @@ class Custom_User_Admin(UserAdmin):
 
         kwargs.update(
             {
-                "labels": {"password": "Hashed password string"},
+                "labels": {"password": _("Hashed password string")},
                 "help_texts": {
                     "groups": None,
                     "user_permissions": None,

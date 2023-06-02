@@ -7,7 +7,7 @@ from typing import Sequence, Type
 from django import urls as django_urls
 from django.contrib import auth
 from django.views.generic import RedirectView
-from knox.views import LoginView as KnoxLoginView  # type: ignore
+from knox.views import LoginView as KnoxLoginView
 from rest_framework.authtoken.serializers import AuthTokenSerializer
 from rest_framework.permissions import AllowAny, BasePermission
 from rest_framework.request import Request
@@ -44,7 +44,7 @@ class Admin_Docs_Redirect_View(RedirectView):
         return url
 
 
-class LoginView(KnoxLoginView):
+class LoginView(KnoxLoginView):  # type: ignore
     """
         Customised login view to accept all users.
 
@@ -65,4 +65,4 @@ class LoginView(KnoxLoginView):
 
         auth.login(request, serializer.validated_data["user"])
 
-        return super(LoginView, self).post(request)
+        return super(LoginView, self).post(request)  # type: ignore
