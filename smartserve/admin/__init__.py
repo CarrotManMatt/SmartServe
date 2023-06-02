@@ -5,14 +5,19 @@
 from typing import Type
 
 from django.contrib import admin, auth
+from django.contrib.admin import ModelAdmin
 from django.contrib.auth.admin import UserAdmin
+from django.db import models
+from django.db.models import QuerySet
 from django.forms import ModelForm
+from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 from rangefilter.filters import DateTimeRangeFilterBuilder
 
-from admin_inlines import Auth_Tokens_Inline
-from smartserve.admin_filters import Group_List_Filter, Staff_List_Filter, User_Is_Active_List_Filter
-from smartserve.models import User
+from .filters import Employee_Count_List_Filter, Group_List_Filter, Staff_List_Filter, User_Is_Active_List_Filter
+from .forms import Custom_User_Admin_Form
+from .inlines import Auth_Tokens_Inline
+from smartserve.models import Restaurant, User
 
 admin.site.site_header = f"""SmartServe {_("Administration")}"""
 admin.site.site_title = f"""SmartServe {_("Admin")}"""
@@ -28,11 +33,17 @@ class Custom_User_Admin(UserAdmin):
         list, create & update pages.
     """
 
+    form = Custom_User_Admin_Form
     date_hierarchy = "date_joined"
     filter_horizontal = ("user_permissions",)
     fieldsets = (
         (None, {
-            "fields": ("employee_id", ("first_name", "last_name"), "is_active")
+            "fields": (
+                "employee_id",
+                ("first_name", "last_name"),
+                "is_active",
+                "restaurants"
+            )
         }),
         ("Authentication", {
             "fields": ("display_date_joined", "display_last_login", "password"),
@@ -56,7 +67,7 @@ class Custom_User_Admin(UserAdmin):
             )
         }),
         ("Extra", {
-            "fields": ("is_active",),
+            "fields": ("is_active", "restaurants"),
             "classes": ("collapse",)
         }),
         ("Permissions", {
@@ -144,3 +155,39 @@ class Custom_User_Admin(UserAdmin):
             }
         )
         return super().get_form(*args, **kwargs)
+
+
+@admin.register(Restaurant)
+class Restaurant_Admin(ModelAdmin):
+    fields = ("name", "employee_count", "employees")
+    filter_horizontal = ("employees",)
+    list_display = ("name", "employee_count")
+    list_filter = (Employee_Count_List_Filter,)
+    search_fields = ("name",)
+    search_help_text = _("Search for a restaurant name")
+    list_display_links = ("name",)
+    readonly_fields = ("employee_count",)
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Restaurant]:
+        """
+            Return a QuerySet of all :model:`smartserve.restaurant` model
+            instances that can be edited by the admin site. This is used by
+            changelist_view.
+
+            Adds the calculated annotated field "employee_count" to the
+            queryset.
+        """
+
+        return super().get_queryset(request).annotate(  # type: ignore
+            _employee_count=models.Count("employees", distinct=True)
+        )
+
+    @admin.display(description=_("Number of Employees"), ordering="_employee_count")
+    def employee_count(self, obj: Restaurant) -> int:
+        """
+            Returns the number of employees this restaurant has, to be displayed
+            on the admin page.
+        """
+
+        # noinspection PyProtectedMember
+        return obj._employee_count  # type: ignore

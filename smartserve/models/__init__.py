@@ -1,46 +1,24 @@
+from typing import Callable
+
+from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser
-from django.contrib.auth.models import Permission, PermissionsMixin, UserManager
+from django.contrib.auth.models import Permission, PermissionsMixin
 from django.core.validators import MinLengthValidator, RegexValidator
 from django.db import models
+from django.db.models import Manager
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from smartserve.models.utils import Attribute_Deleter, Custom_Base_Model
 from . import utils
-
-
-class Custom_User_Manager(UserManager):
-    normalize_email = Attribute_Deleter(object_name="Custom_User_Manager", attribute_name="normalize_email")  # type: ignore
-
-    use_in_migrations: bool = True
-
-    def _create_user(self, password: str | None = None, **extra_fields) -> "User":
-        user: "User" = self.model(**extra_fields)  # type: ignore
-        user.set_password(password)
-        user.save(using=self._db)
-        return user
-
-    def create_user(self, password: str | None = None, **extra_fields) -> "User":  # type: ignore
-        extra_fields.setdefault("is_staff", False)
-        extra_fields.setdefault("is_superuser", False)
-
-        return self._create_user(password, **extra_fields)
-
-    def create_superuser(self, password: str | None = None, **extra_fields) -> "User":  # type: ignore
-        extra_fields.setdefault("is_staff", True)
-        extra_fields.setdefault("is_superuser", True)
-
-        if extra_fields.get("is_staff") is not True:
-            raise ValueError("Superuser must have is_staff=True.")
-        if extra_fields.get("is_superuser") is not True:
-            raise ValueError("Superuser must have is_superuser=True.")
-
-        return self._create_user(password, **extra_fields)
+from .managers import Custom_User_Manager
+from .utils import Attribute_Deleter, Custom_Base_Model
 
 
 class User(Custom_Base_Model, AbstractBaseUser, PermissionsMixin):
     get_email_field_name = Attribute_Deleter(object_name="User", attribute_name="get_email_field_name")  # type: ignore
     normalize_username = Attribute_Deleter(object_name="User", attribute_name="normalize_username")  # type: ignore
+
+    restaurants: Manager
 
     employee_id = models.CharField(
         _("Employee ID"),
@@ -74,7 +52,6 @@ class User(Custom_Base_Model, AbstractBaseUser, PermissionsMixin):
 
     class Meta:
         verbose_name = _("User")
-        abstract = False
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -106,6 +83,32 @@ class User(Custom_Base_Model, AbstractBaseUser, PermissionsMixin):
         """ Return the short name for the user. """
 
         return self.first_name
+
+    get_full_name: Callable[["User"], str] = full_name
+    get_short_name: Callable[["User"], str] = short_name
+
+    def get_absolute_url(self) -> str:  # TODO
+        raise NotImplementedError
+
+
+class Restaurant(Custom_Base_Model):
+    name = models.CharField(
+        _("Name"),
+        max_length=100,
+        validators=[RegexValidator(r"^[A-Za-z ]+\Z"), MinLengthValidator(2)]
+    )
+    employees = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="restaurants",
+        help_text=_("The set of employees at this restaurant. (Hold down “Control”, or “Command” on a Mac, to select more than one.)"),
+        blank=True
+    )
+
+    class Meta:
+        verbose_name = _("Restaurant")
+
+    def __str__(self) -> str:
+        return self.name
 
     def get_absolute_url(self) -> str:  # TODO
         raise NotImplementedError

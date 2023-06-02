@@ -5,7 +5,7 @@
 import django.urls
 from django.contrib import admin
 from django.urls import URLPattern, URLResolver
-from knox.views import LogoutAllView, LogoutView  # type: ignore
+from knox.views import LogoutAllView, LogoutView
 
 from .views import Admin_Docs_Redirect_View, LoginView
 

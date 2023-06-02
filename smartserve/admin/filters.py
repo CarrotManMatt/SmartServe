@@ -1,11 +1,13 @@
-from typing import Sequence, Any
+from typing import Any, Sequence, Type
 
 from django.contrib import admin
 from django.contrib.admin import ModelAdmin
 from django.contrib.auth.models import Group
-from django.db.models import QuerySet
+from django.db import models
+from django.db.models import Model, QuerySet
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
+from rangefilter.filters import NumericRangeFilter
 
 from smartserve.models import User
 
@@ -91,3 +93,20 @@ class User_Is_Active_List_Filter(admin.SimpleListFilter):
             return queryset.filter(is_active=False)
         else:
             return queryset
+
+
+class Employee_Count_List_Filter(admin.ListFilter):
+    """
+        Admin filter to limit the :model:`smartserve.restaurant` objects shown
+        on the admin list view, by the number of employees it has.
+    """
+
+    def __new__(cls, request: HttpRequest, params: dict[str, str], model: Type[Model], model_admin: ModelAdmin) -> admin.ListFilter:  # type: ignore
+        return NumericRangeFilter(  # type: ignore
+            models.PositiveIntegerField(verbose_name=_("Number of Employees")),
+            request,
+            params,
+            model,
+            model_admin,
+            field_path="_employee_count",
+        )

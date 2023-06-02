@@ -14,6 +14,15 @@ def generate_employee_id() -> str:
     return str(uuid.uuid4().int)[:6]
 
 
+class Attribute_Deleter:
+    def __init__(self, object_name: str, attribute_name: str) -> None:
+        self.object_name: str = object_name
+        self.attribute_name: str = attribute_name
+
+    def __get__(self, instance: object, owner: object) -> Self:
+        raise AttributeError(f"type object '{self.object_name}' has no attribute '{self.attribute_name}'")
+
+
 class Custom_Base_Model(Model):
     """
         Base model that provides extra utility methods for all other models to
@@ -144,12 +153,3 @@ class Custom_Base_Model(Model):
             return {field.name for field in multi_relation_fields}
         else:
             return multi_relation_fields
-
-
-class Attribute_Deleter:
-    def __init__(self, object_name: str, attribute_name: str) -> None:
-        self.object_name: str = object_name
-        self.attribute_name: str = attribute_name
-
-    def __get__(self, instance: object, owner: object) -> Self:
-        raise AttributeError(f"type object '{self.object_name}' has no attribute '{self.attribute_name}'")

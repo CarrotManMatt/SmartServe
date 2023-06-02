@@ -37,7 +37,7 @@ class Migration(migrations.Migration):
                 'abstract': False,
             },
             managers=[
-                ('objects', smartserve.models.Custom_User_Manager()),
+                ('objects', smartserve.models.managers.Custom_User_Manager()),
             ],
         ),
     ]
