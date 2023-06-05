@@ -6,7 +6,7 @@ from django.utils.translation import gettext_lazy as _
 from smartserve.models import Restaurant, User
 
 
-class Custom_User_Admin_Form(UserChangeForm):
+class Custom_User_Change_Form(UserChangeForm):
     restaurants = forms.ModelMultipleChoiceField(
         queryset=Restaurant.objects.all(),
         required=False,

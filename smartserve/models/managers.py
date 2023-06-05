@@ -1,5 +1,6 @@
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import UserManager
+from django.db.models import Manager, QuerySet
 
 from .utils import Attribute_Deleter
 
@@ -31,3 +32,11 @@ class Custom_User_Manager(UserManager):
             raise ValueError("Superuser must have is_superuser=True.")
 
         return self._create_user(password, **extra_fields)
+
+
+class Table_Manager(Manager):
+    def get_queryset(self) -> QuerySet:
+        return super().get_queryset().filter(container_table__isnull=True)
+
+    def all_with_sub_tables(self) -> QuerySet:
+        return super().get_queryset()

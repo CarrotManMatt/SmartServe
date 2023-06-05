@@ -3,6 +3,7 @@ from typing import Callable
 from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import Permission, PermissionsMixin
+from django.core.exceptions import ValidationError
 from django.core.validators import MinLengthValidator, RegexValidator
 from django.db import models
 from django.db.models import Manager
@@ -10,7 +11,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from . import utils
-from .managers import Custom_User_Manager
+from .managers import Custom_User_Manager, Table_Manager
 from .utils import Attribute_Deleter, Custom_Base_Model
 
 
@@ -72,6 +73,12 @@ class User(Custom_Base_Model, AbstractBaseUser, PermissionsMixin):
         if not self.employee_id:
             self.employee_id = utils.generate_employee_id()
 
+        if self._meta.model.objects.filter(pk=self.pk).exists():
+            restaurant: Restaurant
+            for restaurant in self.restaurants.all():
+                if restaurant.employees.filter(first_name=self.first_name, last_name=self.last_name).exclude(id=self.id).exists():
+                    raise ValidationError({"full_name": "An employee with that first & last name already exists at one of the restaurants that this employee is assigned to."}, code="unique")
+
     @property
     def full_name(self) -> str:
         """ Return the first_name plus the last_name, with a space in between. """
@@ -100,6 +107,7 @@ class Restaurant(Custom_Base_Model):
     employees = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         related_name="restaurants",
+        verbose_name=_("Employees"),
         help_text=_("The set of employees at this restaurant. (Hold down “Control”, or “Command” on a Mac, to select more than one.)"),
         blank=True
     )
@@ -112,3 +120,49 @@ class Restaurant(Custom_Base_Model):
 
     def get_absolute_url(self) -> str:  # TODO
         raise NotImplementedError
+
+
+class Table(Custom_Base_Model):
+    number = models.PositiveIntegerField(
+        _("Number")
+    )
+    restaurant = models.ForeignKey(
+        Restaurant,
+        on_delete=models.CASCADE,
+        related_name="tables",
+        verbose_name=_("Restaurant"),
+        help_text=_("The restaurant that this table is within."),
+        blank=False,
+        null=False
+    )
+    container_table = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        related_name="sub_tables",
+        verbose_name=_("Parent Container Table"),
+        help_text=_("The reference to the parent container table, if this table object is a sub-table."),
+        blank=True,
+        null=True
+    )
+
+    objects = Table_Manager()
+
+    class Meta:
+        verbose_name = _("Table")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("number", "restaurant"),
+                name="unique_restaurant_table_number"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Table {self.number} - {self.restaurant}"
+
+    def clean(self) -> None:
+        if self.container_table:
+            if self.container_table == self:
+                raise ValidationError({"container_table": _("The parent container table cannot be this own table.")}, code="invalid")
+
+            if self.container_table.restaurant != self.restaurant:
+                raise ValidationError({"container_table": _("Only tables at the same restaurant can be used as a parent container table.")}, code="invalid")

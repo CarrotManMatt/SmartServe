@@ -11,3 +11,13 @@ class SmartServeConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "smartserve"
     verbose_name = "SmartServe"
+
+    @staticmethod
+    def ready(**kwargs) -> None:
+        """
+            Import function that ensures the signal handlers within this app
+            are loaded and waiting for signals to be sent.
+        """
+
+        from smartserve.models import signals
+        signals.ready()

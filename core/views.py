@@ -2,7 +2,7 @@
     Views for direct use in core app.
 """
 
-from typing import Sequence, Type
+from typing import Sequence
 
 from django import urls as django_urls
 from django.contrib import auth
@@ -51,7 +51,7 @@ class LoginView(KnoxLoginView):  # type: ignore
         (Login is done by POST request rather than authorization headers.)
     """
 
-    permission_classes: Sequence[Type[BasePermission]] = [AllowAny]
+    permission_classes: Sequence[type[BasePermission]] = [AllowAny]
 
     def post(self, request: Request, format: str | None = None) -> Response:
         """
