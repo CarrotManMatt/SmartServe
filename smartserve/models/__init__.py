@@ -11,13 +11,13 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from . import utils
-from .managers import Custom_User_Manager, Table_Manager
-from .utils import Attribute_Deleter, Custom_Base_Model
+from .managers import UserManager
+from .utils import AttributeDeleter, CustomBaseModel
 
 
-class User(Custom_Base_Model, AbstractBaseUser, PermissionsMixin):
-    get_email_field_name = Attribute_Deleter(object_name="User", attribute_name="get_email_field_name")  # type: ignore
-    normalize_username = Attribute_Deleter(object_name="User", attribute_name="normalize_username")  # type: ignore
+class User(CustomBaseModel, AbstractBaseUser, PermissionsMixin):
+    get_email_field_name = AttributeDeleter(object_name="User", attribute_name="get_email_field_name")  # type: ignore
+    normalize_username = AttributeDeleter(object_name="User", attribute_name="normalize_username")  # type: ignore
 
     restaurants: Manager
 
@@ -46,7 +46,7 @@ class User(Custom_Base_Model, AbstractBaseUser, PermissionsMixin):
     )
     date_joined = models.DateTimeField(_("Date Joined"), default=timezone.now)
 
-    objects = Custom_User_Manager()
+    objects = UserManager()
 
     USERNAME_FIELD: str = "employee_id"
     REQUIRED_FIELDS = ["first_name", "last_name"]
@@ -64,7 +64,7 @@ class User(Custom_Base_Model, AbstractBaseUser, PermissionsMixin):
         self._meta.get_field("is_superuser").verbose_name = _("Is Superuser?")
 
     def __str__(self) -> str:
-        return self.full_name
+        return f"{self.employee_id} - {self.full_name}"
 
     def clean(self) -> None:
         if self.is_superuser:
@@ -73,11 +73,18 @@ class User(Custom_Base_Model, AbstractBaseUser, PermissionsMixin):
         if not self.employee_id:
             self.employee_id = utils.generate_employee_id()
 
-        if self._meta.model.objects.filter(pk=self.pk).exists():
+        # noinspection PyProtectedMember
+        if self._meta.model._base_manager.filter(pk=self.pk).exists():
             restaurant: Restaurant
             for restaurant in self.restaurants.all():
                 if restaurant.employees.filter(first_name=self.first_name, last_name=self.last_name).exclude(id=self.id).exists():
-                    raise ValidationError({"full_name": "An employee with that first & last name already exists at one of the restaurants that this employee is assigned to."}, code="unique")
+                    raise ValidationError(
+                        {
+                            "first_name": "An employee with that first & last name already exists at one of the restaurants that this employee is assigned to.",
+                            "last_name": "An employee with that first & last name already exists at one of the restaurants that this employee is assigned to."
+                        },
+                        code="unique"
+                    )
 
     @property
     def full_name(self) -> str:
@@ -98,7 +105,7 @@ class User(Custom_Base_Model, AbstractBaseUser, PermissionsMixin):
         raise NotImplementedError
 
 
-class Restaurant(Custom_Base_Model):
+class Restaurant(CustomBaseModel):
     name = models.CharField(
         _("Name"),
         max_length=100,
@@ -122,7 +129,7 @@ class Restaurant(Custom_Base_Model):
         raise NotImplementedError
 
 
-class Table(Custom_Base_Model):
+class Table(CustomBaseModel):
     number = models.PositiveIntegerField(
         _("Number")
     )
@@ -145,7 +152,12 @@ class Table(Custom_Base_Model):
         null=True
     )
 
-    objects = Table_Manager()
+    @property
+    def true_number(self) -> int:
+        if self.container_table:
+            return self.container_table.true_number
+        else:
+            return self.number
 
     class Meta:
         verbose_name = _("Table")
@@ -166,3 +178,14 @@ class Table(Custom_Base_Model):
 
             if self.container_table.restaurant != self.restaurant:
                 raise ValidationError({"container_table": _("Only tables at the same restaurant can be used as a parent container table.")}, code="invalid")
+
+            def check_container_table_not_in_sub_tables(table: Table, container_table: Table) -> bool:
+                if not table.sub_tables.all():
+                    return True
+                elif table.sub_tables.contains(container_table):
+                    return False
+                else:
+                    return all(check_container_table_not_in_sub_tables(sub_table, container_table) for sub_table in table.sub_tables.all())
+
+            if self.container_table and not check_container_table_not_in_sub_tables(self, self.container_table):
+                raise ValidationError({"container_table": _("The parent container table cannot be a sub-table of this table.")}, code="invalid")

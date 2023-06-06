@@ -1,33 +1,30 @@
-from typing import Sequence
-
 from django.contrib import admin
-from django.db.models import QuerySet
-from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 from knox.models import AuthToken
 
 from smartserve.models import Table
 
 
-class Auth_Tokens_Inline(admin.StackedInline):
+class UserAuthTokensInline(admin.StackedInline):
     classes = ["collapse"]
     extra = 0
     model = AuthToken
 
 
-class Tables_Inline(admin.TabularInline):
+class RestaurantTablesInline(admin.TabularInline):
     extra = 0
     model = Table
     verbose_name_plural = _("Tables (including Sub-Tables)")
+    readonly_fields = ("true_number",)
 
-    def get_queryset(self, request: HttpRequest) -> QuerySet[Table]:
-        queryset: QuerySet[Table] = self.model.objects.all_with_sub_tables()
+    @admin.display(description=_("True Number"))
+    def true_number(self, obj: Table | None) -> int | str:
+        """
+            Returns the true number of this table (following the container_table relation), to be displayed on the admin
+            page.
+        """
 
-        ordering: Sequence[str] = self.get_ordering(request)
-        if ordering:
-            queryset = queryset.order_by(*ordering)
+        if not obj or not obj.true_number:
+            return admin.site.empty_value_display
 
-        if not self.has_view_or_change_permission(request):
-            queryset = queryset.none()
-
-        return queryset
+        return obj.true_number

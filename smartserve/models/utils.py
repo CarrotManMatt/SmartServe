@@ -14,7 +14,7 @@ def generate_employee_id() -> str:
     return str(uuid.uuid4().int)[:6]
 
 
-class Attribute_Deleter:
+class AttributeDeleter:
     def __init__(self, object_name: str, attribute_name: str) -> None:
         self.object_name: str = object_name
         self.attribute_name: str = attribute_name
@@ -23,7 +23,7 @@ class Attribute_Deleter:
         raise AttributeError(f"type object '{self.object_name}' has no attribute '{self.attribute_name}'")
 
 
-class Custom_Base_Model(Model):
+class CustomBaseModel(Model):
     """
         Base model that provides extra utility methods for all other models to
         use.
@@ -56,7 +56,7 @@ class Custom_Base_Model(Model):
         super().refresh_from_db(using=using, fields=list(fields_set) if fields_set else None)
 
         if deep:  # NOTE: Refresh any related fields/objects if requested
-            updated_model: Model = self._meta.model.objects.get(id=self.id)  # type: ignore
+            updated_model: Model = self._meta.model._base_manager.get(id=self.id)  # type: ignore
 
             field: models.Field | ForeignObjectRel | GenericForeignKey
             for field in self.get_single_relation_fields():  # type: ignore

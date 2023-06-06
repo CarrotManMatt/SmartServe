@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 
-class Admin_Docs_Redirect_View(RedirectView):
+class AdminDocsRedirectView(RedirectView):
     """
         Helper redirect view for the docs/ url to doc/ (with any included
         subpath).

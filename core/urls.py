@@ -7,7 +7,7 @@ from django.contrib import admin
 from django.urls import URLPattern, URLResolver
 from knox.views import LogoutAllView, LogoutView
 
-from .views import Admin_Docs_Redirect_View, LoginView
+from .views import AdminDocsRedirectView, LoginView
 
 # noinspection SpellCheckingInspection
 urlpatterns: list[URLResolver | URLPattern] = [
@@ -15,10 +15,10 @@ urlpatterns: list[URLResolver | URLPattern] = [
         r"admin/doc/",
         django.urls.include("django.contrib.admindocs.urls")
     ),
-    django.urls.path(r"admin/docs/", Admin_Docs_Redirect_View.as_view()),
+    django.urls.path(r"admin/docs/", AdminDocsRedirectView.as_view()),
     django.urls.path(
         r"admin/docs/<path:subpath>",
-        Admin_Docs_Redirect_View.as_view()
+        AdminDocsRedirectView.as_view()
     ),
     django.urls.path(r"admin/", admin.site.urls),
     django.urls.path(

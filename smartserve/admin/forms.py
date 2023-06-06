@@ -1,12 +1,12 @@
 from django import forms
 from django.contrib.admin import widgets
-from django.contrib.auth.forms import UserChangeForm
+from django.contrib.auth.forms import UserChangeForm as DjangoUserChangeForm
 from django.utils.translation import gettext_lazy as _
 
 from smartserve.models import Restaurant, User
 
 
-class Custom_User_Change_Form(UserChangeForm):
+class UserChangeForm(DjangoUserChangeForm):
     restaurants = forms.ModelMultipleChoiceField(
         queryset=Restaurant.objects.all(),
         required=False,

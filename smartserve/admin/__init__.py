@@ -1,11 +1,12 @@
 """
     Admin configurations for models in smartserve app.
 """
+
 from typing import Callable, Sequence
 
 from django.contrib import admin, auth
 from django.contrib.admin import ModelAdmin
-from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.db import models
 from django.db.models import QuerySet
 from django.forms import ModelForm
@@ -14,9 +15,10 @@ from django.utils.translation import gettext_lazy as _
 from rangefilter.filters import DateTimeRangeFilterBuilder
 
 from smartserve.models import Restaurant, Table, User
-from .filters import Employee_Count_List_Filter, Group_List_Filter, Restaurant_List_Filter, Staff_List_Filter, Table_Count_List_Filter, Table_Is_Sub_Table, User_Is_Active_List_Filter
-from .forms import Custom_User_Change_Form
-from .inlines import Auth_Tokens_Inline, Tables_Inline
+from .filters import RestaurantEmployeeCountListFilter, UserGroupListFilter, TableRestaurantListFilter, \
+    UserIsStaffListFilter, RestaurantTableCountListFilter, TableIsSubTableFilter, UserIsActiveListFilter
+from .forms import UserChangeForm
+from .inlines import UserAuthTokensInline, RestaurantTablesInline
 
 admin.site.site_header = f"""SmartServe {_("Administration")}"""
 admin.site.site_title = f"""SmartServe {_("Admin")}"""
@@ -25,14 +27,14 @@ admin.site.empty_value_display = "- - - - -"
 
 
 @admin.register(auth.get_user_model())
-class Custom_User_Admin(UserAdmin):
+class UserAdmin(DjangoUserAdmin):
     """
         Admin display configuration for :model:`smartserve.user` models, that
         adds the functionality to provide custom display configurations on the
         list, create & update pages.
     """
 
-    form = Custom_User_Change_Form
+    form = UserChangeForm
     date_hierarchy = "date_joined"
     filter_horizontal = ("user_permissions",)
     fieldsets = (
@@ -66,7 +68,7 @@ class Custom_User_Admin(UserAdmin):
             )
         }),
         ("Extra", {
-            "fields": ("is_active", "restaurants"),
+            "fields": ("is_active",),
             "classes": ("collapse",)
         }),
         ("Permissions", {
@@ -79,7 +81,7 @@ class Custom_User_Admin(UserAdmin):
             "classes": ("collapse",)
         })
     )
-    inlines = (Auth_Tokens_Inline,)
+    inlines = (UserAuthTokensInline,)
     list_display = (
         "employee_id",
         "first_name",
@@ -95,9 +97,9 @@ class Custom_User_Admin(UserAdmin):
         "is_active"
     )
     list_filter = (
-        Staff_List_Filter,
-        Group_List_Filter,
-        User_Is_Active_List_Filter,
+        UserIsStaffListFilter,
+        UserGroupListFilter,
+        UserIsActiveListFilter,
         ("date_joined", DateTimeRangeFilterBuilder(title=_("Date Joined"))),
         ("last_login", DateTimeRangeFilterBuilder(title=_("Last Login")))
     )
@@ -160,12 +162,12 @@ class Custom_User_Admin(UserAdmin):
 
 
 @admin.register(Restaurant)
-class Restaurant_Admin(ModelAdmin):
+class RestaurantAdmin(ModelAdmin):
     fields = ("name", ("employee_count", "employees"), "table_count")
     filter_horizontal = ("employees",)
     list_display = ("name", "employee_count", "table_count")
-    list_filter = (Employee_Count_List_Filter, Table_Count_List_Filter)
-    inlines = (Tables_Inline,)
+    list_filter = (RestaurantEmployeeCountListFilter, RestaurantTableCountListFilter)
+    inlines = (RestaurantTablesInline,)
     search_fields = ("name",)
     search_help_text = _("Search for a restaurant name")
     list_display_links = ("name",)
@@ -214,52 +216,66 @@ class Restaurant_Admin(ModelAdmin):
 
 
 @admin.register(Table)
-class Table_Admin(ModelAdmin):
+class TableAdmin(ModelAdmin):
     ordering = ("restaurant", "number")
-    fields = ("number", "restaurant", "container_table")
-    list_display = ("number", "restaurant", "container_table")
-    list_filter = (Table_Is_Sub_Table, Restaurant_List_Filter)
+    fields = ("number", "restaurant", "container_table", "true_number")
+    list_display = ("number", "restaurant", "container_table", "true_number")
+    list_filter = (TableIsSubTableFilter, TableRestaurantListFilter)
     search_fields = ("number", "restaurant__name", "container_table__number")
     search_help_text = _("Search for a table number or restaurant name")
     list_display_links = ("number",)
-    list_editable = ("restaurant", "container_table")
+    list_editable = ("container_table",)
     autocomplete_fields = ("restaurant", "container_table")
+    readonly_fields = ("true_number",)
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Table]:
-        return self.model.objects.all_with_sub_tables()  # type: ignore
+        # noinspection PyProtectedMember
+        return self.model._base_manager.order_by("id")  # type: ignore
 
     def get_list_filter(self, request: HttpRequest) -> Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]]:
         list_filter: Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]] = super().get_list_filter(request)
 
         if Restaurant.objects.count() > 15:
-            list_filter = tuple(obj_filter for obj_filter in list_filter if obj_filter != Restaurant_List_Filter)
+            list_filter = tuple(obj_filter for obj_filter in list_filter if obj_filter != TableRestaurantListFilter)
 
         return list_filter
 
     def get_list_display(self, request: HttpRequest) -> Sequence[str | Callable]:  # type: ignore
         list_display: Sequence[str | Callable] = super().get_list_display(request)
 
-        if Table_Is_Sub_Table.parameter_name not in request.GET:
+        if TableIsSubTableFilter.parameter_name not in request.GET:
             list_display = tuple(field for field in list_display if field != "container_table")
 
         return list_display
 
     def get_search_results(self, request: HttpRequest, queryset: QuerySet[Table], search_term: str) -> tuple[QuerySet[Table], bool]:
-        if "Referer" in request.headers and "/admin/smartserve/table/" in request.headers["Referer"]:
-            print(queryset)
+        # noinspection PyArgumentList
+        if request.META.get("HTTP_X_REQUESTED_WITH") == "XMLHttpRequest" and "/autocomplete/" in request.path and request.GET.get("model_name") == "table" and "Referer" in request.headers:
             try:
-                table_pk: int = int(request.headers["Referer"].split(r"/")[-2])
+                table_pk: int = int(request.headers["Referer"].strip(r"/").split(r"/")[-2])
             except ValueError:
                 pass
             else:
                 queryset = queryset.exclude(pk=table_pk)
-                print(queryset)
 
                 try:
-                    table: Table = Table.objects.all_with_sub_tables().get(pk=table_pk)
+                    # noinspection PyProtectedMember
+                    table: Table = Table._base_manager.get(pk=table_pk)
                 except Table.DoesNotExist:
                     pass
                 else:
                     queryset = queryset.filter(models.Q(container_table__isnull=True) | models.Q(container_table__isnull=False, container_table__restaurant__pk=table.restaurant.pk))
 
         return super().get_search_results(request, queryset, search_term)
+
+    @admin.display(description=_("True Number"))
+    def true_number(self, obj: Table | None) -> int | str:
+        """
+            Returns the true number of this table (following the container_table relation), to be displayed on the admin
+            page.
+        """
+
+        if not obj or not obj.true_number:
+            return admin.site.empty_value_display
+
+        return obj.true_number

@@ -27,13 +27,15 @@ def user_added_to_restaurant(sender, instance: User | Restaurant, action: str, r
     if action == "post_add":
         if isinstance(instance, Restaurant) and not reverse:
             user: User
-            for user in model.objects.filter(id__in=pk_set):  # type: ignore
+            # noinspection PyProtectedMember
+            for user in model._base_manager.filter(id__in=pk_set):  # type: ignore
                 if instance.employees.filter(first_name=user.first_name, last_name=user.last_name).exclude(id=user.id).exists():
                     instance.employees.remove(user)
 
         elif isinstance(instance, auth.get_user_model()) and reverse:
             restaurant: Restaurant
-            for restaurant in model.objects.filter(id__in=pk_set):  # type: ignore
+            # noinspection PyProtectedMember
+            for restaurant in model._base_manager.filter(id__in=pk_set):  # type: ignore
                 # noinspection PyUnresolvedReferences
                 if restaurant.employees.filter(first_name=instance.first_name, last_name=instance.last_name).exclude(id=instance.id).exists():
                     restaurant.employees.remove(instance)

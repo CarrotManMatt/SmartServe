@@ -12,7 +12,7 @@ from rangefilter.filters import NumericRangeFilter
 from smartserve.models import Restaurant, Table, User
 
 
-class Staff_List_Filter(admin.SimpleListFilter):
+class UserIsStaffListFilter(admin.SimpleListFilter):
     """
         Admin filter to limit the :model:`smartserve.user` objects shown on the
         admin list view, by whether the user is a staff member.
@@ -40,7 +40,7 @@ class Staff_List_Filter(admin.SimpleListFilter):
             return queryset
 
 
-class Group_List_Filter(admin.SimpleListFilter):
+class UserGroupListFilter(admin.SimpleListFilter):
     """
         Admin filter to limit the :model:`smartserve.user` objects shown on the
         admin list view, by the user's group.
@@ -67,7 +67,7 @@ class Group_List_Filter(admin.SimpleListFilter):
             return queryset
 
 
-class User_Is_Active_List_Filter(admin.SimpleListFilter):
+class UserIsActiveListFilter(admin.SimpleListFilter):
     """
         Admin filter to limit the :model:`smartserve.user` objects shown on the
         admin list view, by the user's active status.
@@ -95,7 +95,7 @@ class User_Is_Active_List_Filter(admin.SimpleListFilter):
             return queryset
 
 
-class Employee_Count_List_Filter(admin.ListFilter):
+class RestaurantEmployeeCountListFilter(admin.ListFilter):
     """
         Admin filter to limit the :model:`smartserve.restaurant` objects shown
         on the admin list view, by the number of employees it has.
@@ -112,7 +112,7 @@ class Employee_Count_List_Filter(admin.ListFilter):
         )
 
 
-class Table_Count_List_Filter(admin.ListFilter):
+class RestaurantTableCountListFilter(admin.ListFilter):
     """
         Admin filter to limit the :model:`smartserve.restaurant` objects shown
         on the admin list view, by the number of tables it has.
@@ -129,7 +129,7 @@ class Table_Count_List_Filter(admin.ListFilter):
         )
 
 
-class Table_Is_Sub_Table(admin.SimpleListFilter):
+class TableIsSubTableFilter(admin.SimpleListFilter):
     """
         Admin filter to limit the :model:`smartserve.table` objects shown on the
         admin list view, by whether it is a sub-table or not.
@@ -170,7 +170,7 @@ class Table_Is_Sub_Table(admin.SimpleListFilter):
             return queryset
 
 
-class Restaurant_List_Filter(admin.SimpleListFilter):
+class TableRestaurantListFilter(admin.SimpleListFilter):
     """
         Admin filter to limit the :model:`smartserve.table` objects shown on the
         admin list view, by the restaurant the table is within.
