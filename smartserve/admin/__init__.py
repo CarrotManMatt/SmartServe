@@ -14,11 +14,10 @@ from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 from rangefilter.filters import DateTimeRangeFilterBuilder
 
-from smartserve.models import Restaurant, Table, User
-from .filters import RestaurantEmployeeCountListFilter, UserGroupListFilter, TableRestaurantListFilter, \
-    UserIsStaffListFilter, RestaurantTableCountListFilter, TableIsSubTableFilter, UserIsActiveListFilter
+from smartserve.models import Restaurant, Seat, Table, User
+from .filters import RestaurantEmployeeCountListFilter, RestaurantTableCountListFilter, SeatRestaurantListFilter, TableIsSubTableFilter, TableRestaurantListFilter, UserGroupListFilter, UserIsActiveListFilter, UserIsStaffListFilter
 from .forms import UserChangeForm
-from .inlines import UserAuthTokensInline, RestaurantTablesInline
+from .inlines import RestaurantTablesInline, TableSeatsInline, UserAuthTokensInline
 
 admin.site.site_header = f"""SmartServe {_("Administration")}"""
 admin.site.site_title = f"""SmartServe {_("Admin")}"""
@@ -218,19 +217,16 @@ class RestaurantAdmin(ModelAdmin):
 @admin.register(Table)
 class TableAdmin(ModelAdmin):
     ordering = ("restaurant", "number")
-    fields = ("number", "restaurant", "container_table", "true_number")
+    fields = (("number", "true_number"), "restaurant", "container_table")
     list_display = ("number", "restaurant", "container_table", "true_number")
     list_filter = (TableIsSubTableFilter, TableRestaurantListFilter)
+    inlines = (TableSeatsInline,)
     search_fields = ("number", "restaurant__name", "container_table__number")
     search_help_text = _("Search for a table number or restaurant name")
     list_display_links = ("number",)
     list_editable = ("container_table",)
     autocomplete_fields = ("restaurant", "container_table")
     readonly_fields = ("true_number",)
-
-    def get_queryset(self, request: HttpRequest) -> QuerySet[Table]:
-        # noinspection PyProtectedMember
-        return self.model._base_manager.order_by("id")  # type: ignore
 
     def get_list_filter(self, request: HttpRequest) -> Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]]:
         list_filter: Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]] = super().get_list_filter(request)
@@ -279,3 +275,24 @@ class TableAdmin(ModelAdmin):
             return admin.site.empty_value_display
 
         return obj.true_number
+
+
+@admin.register(Seat)
+class SeatAdmin(ModelAdmin):
+    ordering = ("table", "id")
+    fields = ("id", "table")
+    list_display = ("id", "table")
+    list_filter = (SeatRestaurantListFilter,)
+    search_fields = ("table__number", "table__container_table__number", "table__restaurant__name")
+    search_help_text = _("Search for a table number or restaurant name")
+    list_display_links = ("id",)
+    autocomplete_fields = ("table",)
+    readonly_fields = ("id",)
+
+    def get_list_filter(self, request: HttpRequest) -> Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]]:
+        list_filter: Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]] = super().get_list_filter(request)
+
+        if Restaurant.objects.count() > 15:
+            list_filter = tuple(obj_filter for obj_filter in list_filter if obj_filter != SeatRestaurantListFilter)
+
+        return list_filter

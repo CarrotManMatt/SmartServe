@@ -170,10 +170,10 @@ class TableIsSubTableFilter(admin.SimpleListFilter):
             return queryset
 
 
-class TableRestaurantListFilter(admin.SimpleListFilter):
+class BaseRestaurantListFilter(admin.SimpleListFilter):
     """
-        Admin filter to limit the :model:`smartserve.table` objects shown on the
-        admin list view, by the restaurant the table is within.
+        Admin filter to limit model objects shown on the admin list view, by the restaurant the object is associated
+        with.
     """
 
     title = _("Restaurant")
@@ -187,11 +187,34 @@ class TableRestaurantListFilter(admin.SimpleListFilter):
 
         return tuple((str(restaurant.id), _(str(restaurant.name))) for restaurant in Restaurant.objects.all())
 
+
+class TableRestaurantListFilter(BaseRestaurantListFilter):
+    """
+        Admin filter to limit the :model:`smartserve.table` objects shown on the
+        admin list view, by the restaurant the table is within.
+    """
+
     def queryset(self, request: HttpRequest, queryset: QuerySet[Table]) -> QuerySet[Table]:
         """ Returns the filtered queryset according to the given url lookup. """
 
         restaurant_id: str | None = self.value()
         if restaurant_id:
             return queryset.filter(restaurant=restaurant_id)
+        else:
+            return queryset
+
+
+class SeatRestaurantListFilter(BaseRestaurantListFilter):
+    """
+        Admin filter to limit the :model:`smartserve.seat` objects shown on the
+        admin list view, by the restaurant, the seat's table is within.
+    """
+
+    def queryset(self, request: HttpRequest, queryset: QuerySet[Table]) -> QuerySet[Table]:
+        """ Returns the filtered queryset according to the given url lookup. """
+
+        restaurant_id: str | None = self.value()
+        if restaurant_id:
+            return queryset.filter(table__restaurant=restaurant_id)
         else:
             return queryset

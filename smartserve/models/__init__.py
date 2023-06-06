@@ -6,7 +6,7 @@ from django.contrib.auth.models import Permission, PermissionsMixin
 from django.core.exceptions import ValidationError
 from django.core.validators import MinLengthValidator, RegexValidator
 from django.db import models
-from django.db.models import Manager
+from django.db.models import Manager, QuerySet
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -159,6 +159,17 @@ class Table(CustomBaseModel):
         else:
             return self.number
 
+    @property
+    def seats(self) -> QuerySet["Seat"]:
+        seats: QuerySet[Seat] = self._seats.all()
+
+        if self.sub_tables.exists():
+            sub_table: Table
+            for sub_table in self.sub_tables.all():
+                seats = seats | sub_table.seats
+
+        return seats
+
     class Meta:
         verbose_name = _("Table")
         constraints = [
@@ -180,7 +191,7 @@ class Table(CustomBaseModel):
                 raise ValidationError({"container_table": _("Only tables at the same restaurant can be used as a parent container table.")}, code="invalid")
 
             def check_container_table_not_in_sub_tables(table: Table, container_table: Table) -> bool:
-                if not table.sub_tables.all():
+                if not table.sub_tables.exists():
                     return True
                 elif table.sub_tables.contains(container_table):
                     return False
@@ -189,3 +200,20 @@ class Table(CustomBaseModel):
 
             if self.container_table and not check_container_table_not_in_sub_tables(self, self.container_table):
                 raise ValidationError({"container_table": _("The parent container table cannot be a sub-table of this table.")}, code="invalid")
+
+
+class Seat(CustomBaseModel):
+    table = models.ForeignKey(
+        Table,
+        on_delete=models.CASCADE,
+        related_name="_seats",
+        verbose_name=_("Table"),
+        help_text=_("The Table this seat is at."),
+        null=False
+    )
+
+    class Meta:
+        verbose_name = _("Seat")
+
+    def __str__(self) -> str:
+        return f"Seat {self.id} - Table {self.table.number}"

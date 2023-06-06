@@ -15,9 +15,8 @@ def ready() -> None:
     pass
 
 
-# noinspection PyUnusedLocal
 @dispatch.receiver(signals.m2m_changed, sender=Restaurant.employees.through)
-def user_added_to_restaurant(sender, instance: User | Restaurant, action: str, reverse: bool, model: type[User | Restaurant], pk_set: set[int], **kwargs) -> None:
+def user_added_to_restaurant(_sender, instance: User | Restaurant, action: str, reverse: bool, model: type[User | Restaurant], pk_set: set[int], **_kwargs) -> None:
     """
         Event handler for when a user is added to a restaurant's list of
         employees. The user's full name should be unique among that restaurant's
