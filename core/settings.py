@@ -130,6 +130,7 @@ SESSION_COOKIE_SECURE = True
 
 # Application Definition
 
+# noinspection SpellCheckingInspection
 INSTALLED_APPS = [
     "smartserve",
     "django.contrib.admindocs",

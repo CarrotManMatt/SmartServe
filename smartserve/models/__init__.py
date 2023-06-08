@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Callable
 
 from django.conf import settings
@@ -73,11 +74,10 @@ class User(CustomBaseModel, AbstractBaseUser, PermissionsMixin):
         if not self.employee_id:
             self.employee_id = utils.generate_employee_id()
 
-        # noinspection PyProtectedMember
-        if self._meta.model._base_manager.filter(pk=self.pk).exists():
+        if self.pk:
             restaurant: Restaurant
             for restaurant in self.restaurants.all():
-                if restaurant.employees.filter(first_name=self.first_name, last_name=self.last_name).exclude(id=self.id).exists():
+                if restaurant.employees.filter(first_name=self.first_name, last_name=self.last_name).exclude(pk=self.pk).exists():
                     raise ValidationError(
                         {
                             "first_name": "An employee with that first & last name already exists at one of the restaurants that this employee is assigned to.",
@@ -161,14 +161,26 @@ class Table(CustomBaseModel):
 
     @property
     def seats(self) -> QuerySet["Seat"]:
-        seats: QuerySet[Seat] = self._seats.all()
+        def get_sub_table_seats(table: Table) -> QuerySet[Seat]:
+            # noinspection PyProtectedMember
+            seats: QuerySet[Seat] = table._seats.all()
 
-        if self.sub_tables.exists():
-            sub_table: Table
-            for sub_table in self.sub_tables.all():
-                seats = seats | sub_table.seats
+            if table.sub_tables.exists():
+                sub_table: Table
+                for sub_table in table.sub_tables.all():
+                    seats = seats | get_sub_table_seats(sub_table)
 
-        return seats
+            return seats
+
+        if not self.container_table:
+            return get_sub_table_seats(self)
+
+        else:
+            return self._seats.all()
+
+    @property
+    def bookings(self) -> QuerySet["Booking"]:
+        return Booking.objects.filter(pk__in=self.seats.values_list("seat_bookings__booking__pk", flat=True))
 
     class Meta:
         verbose_name = _("Table")
@@ -181,6 +193,9 @@ class Table(CustomBaseModel):
 
     def __str__(self) -> str:
         return f"Table {self.number} - {self.restaurant}"
+
+    def get_absolute_url(self) -> str:  # TODO
+        raise NotImplementedError
 
     def clean(self) -> None:
         if self.container_table:
@@ -201,6 +216,16 @@ class Table(CustomBaseModel):
             if self.container_table and not check_container_table_not_in_sub_tables(self, self.container_table):
                 raise ValidationError({"container_table": _("The parent container table cannot be a sub-table of this table.")}, code="invalid")
 
+    def create_booking(self, start: datetime, end: datetime) -> "Booking":
+        booking: Booking = Booking.objects.create(start=start, end=end)
+
+        seat: Seat
+        for seat in self.seats.all():
+            SeatBooking.objects.create(seat=seat, booking=booking)
+
+        booking.refresh_from_db()
+        return booking
+
 
 class Seat(CustomBaseModel):
     table = models.ForeignKey(
@@ -209,11 +234,98 @@ class Seat(CustomBaseModel):
         related_name="_seats",
         verbose_name=_("Table"),
         help_text=_("The Table this seat is at."),
+        blank=False,
         null=False
+    )
+    location_index = models.PositiveIntegerField(
+        _("Location Index"),
+        null=False,
+        blank=False
     )
 
     class Meta:
         verbose_name = _("Seat")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("table", "location_index"),
+                name="unique_table_location_index"
+            )
+        ]
 
     def __str__(self) -> str:
-        return f"Seat {self.id} - Table {self.table.number}"
+        return f"Seat {self.location_index} - Table {self.table.number}"
+
+    def get_absolute_url(self) -> str:  # TODO
+        raise NotImplementedError
+
+
+class Booking(CustomBaseModel):
+    start = models.DateTimeField(_("Start Date & Time"))
+    end = models.DateTimeField(_("End Date & Time"))
+
+    @property
+    def tables(self) -> QuerySet[Table]:
+        if not self.pk:
+            raise ValueError(f"{self.__class__.__name__!r} instance needs to have a primary key value before this relationship can be used.")
+
+        return Table.objects.filter(pk__in=self.seat_bookings.values_list("seat__table__pk", flat=True))
+
+    @property
+    def restaurant(self) -> Restaurant | None:
+        if not self.tables.exists():
+            return None
+
+        return self.tables.first().restaurant
+
+    class Meta:
+        verbose_name = _("Booking")
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(end__gt=models.F("start")),
+                name="check_start_end",
+                violation_error_message=_("Start Date & Time must be before End Date & Time.")
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Booking {self.id}"
+
+    def get_absolute_url(self) -> str:  # TODO
+        raise NotImplementedError
+
+
+class SeatBooking(CustomBaseModel):
+    seat = models.ForeignKey(
+        Seat,
+        on_delete=models.PROTECT,
+        related_name="seat_bookings",
+        verbose_name=_("Seat"),
+        help_text=_("The Seat that this is a booking for."),
+        blank=False,
+        null=False
+    )
+    booking = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="seat_bookings",
+        verbose_name=_("Booking"),
+        help_text=_("The overall Booking that this Seat Booking is a part of."),
+        blank=False,
+        null=False
+    )
+
+    class Meta:
+        verbose_name = _("Seat Booking")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("seat", "booking"),
+                name="unique_seat_booking"
+            )
+        ]
+
+    def clean(self) -> None:
+        if self.booking.pk and self.booking.restaurant and self.seat.table.restaurant != self.booking.restaurant:
+            raise ValidationError("The tables within this Booking must all be at the same restaurant", code="invalid")
+
+        if SeatBooking.objects.exclude(booking=self.booking).filter(seat__table=self.seat.table).exclude(booking__start__gte=self.booking.end).exclude(booking__end__lte=self.booking.start).exists():
+            raise ValidationError({"seat": "A booking for this seat's table already exists within these start & end points."}, code="unique")

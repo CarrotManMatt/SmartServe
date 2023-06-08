@@ -56,7 +56,7 @@ class CustomBaseModel(Model):
         super().refresh_from_db(using=using, fields=list(fields_set) if fields_set else None)
 
         if deep:  # NOTE: Refresh any related fields/objects if requested
-            updated_model: Model = self._meta.model._base_manager.get(id=self.id)  # type: ignore
+            updated_model: Model = self._meta.model.objects.get(id=self.id)  # type: ignore
 
             field: models.Field | ForeignObjectRel | GenericForeignKey
             for field in self.get_single_relation_fields():  # type: ignore

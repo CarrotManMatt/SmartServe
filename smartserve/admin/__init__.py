@@ -12,12 +12,12 @@ from django.db.models import QuerySet
 from django.forms import ModelForm
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
-from rangefilter.filters import DateTimeRangeFilterBuilder
+from rangefilter.filters import DateTimeRangeFilter, DateTimeRangeFilterBuilder
 
-from smartserve.models import Restaurant, Seat, Table, User
-from .filters import RestaurantEmployeeCountListFilter, RestaurantTableCountListFilter, SeatRestaurantListFilter, TableIsSubTableFilter, TableRestaurantListFilter, UserGroupListFilter, UserIsActiveListFilter, UserIsStaffListFilter
+from smartserve.models import Booking, Restaurant, Seat, Table, User
+from .filters import BookingRestaurantListFilter, RestaurantEmployeeCountListFilter, RestaurantTableCountListFilter, SeatRestaurantListFilter, TableIsSubTableFilter, TableRestaurantListFilter, UserGroupListFilter, UserIsActiveListFilter, UserIsStaffListFilter
 from .forms import UserChangeForm
-from .inlines import RestaurantTablesInline, TableSeatsInline, UserAuthTokensInline
+from .inlines import BookingSeatBookingsInline, RestaurantTablesInline, TableSeatsInline, UserAuthTokensInline
 
 admin.site.site_header = f"""SmartServe {_("Administration")}"""
 admin.site.site_title = f"""SmartServe {_("Admin")}"""
@@ -46,7 +46,7 @@ class UserAdmin(DjangoUserAdmin):
             )
         }),
         ("Authentication", {
-            "fields": ("display_date_joined", "display_last_login", "password"),
+            "fields": ("date_joined", "last_login", "password"),
             "classes": ("collapse",)
         }),
         ("Permissions", {
@@ -106,15 +106,15 @@ class UserAdmin(DjangoUserAdmin):
     readonly_fields = (
         "employee_id",
         "password",
-        "display_date_joined",
-        "display_last_login"
+        "date_joined",
+        "last_login"
     )
     search_fields = ("employee_id", "first_name", "last_name")
     ordering = ("first_name", "last_name")
     search_help_text = _("Search for an employee ID, first name or last name")
 
-    @admin.display(description="Date joined", ordering="date_joined")
-    def display_date_joined(self, obj: User | None) -> str:
+    @admin.display(description="Date Joined", ordering="date_joined")
+    def date_joined(self, obj: User | None) -> str:
         """
             Returns the custom formatted string representation of the
             date_joined field, to be displayed on the admin page.
@@ -125,8 +125,8 @@ class UserAdmin(DjangoUserAdmin):
 
         return obj.date_joined.strftime("%d %b %Y %I:%M:%S %p")
 
-    @admin.display(description="Last login", ordering="last_login")
-    def display_last_login(self, obj: User | None) -> str:
+    @admin.display(description="Last Login", ordering="last_login")
+    def last_login(self, obj: User | None) -> str:
         """
             Returns the custom formatted string representation of the
             last_login field, to be displayed on the admin page.
@@ -183,8 +183,8 @@ class RestaurantAdmin(ModelAdmin):
         """
 
         return super().get_queryset(request).annotate(  # type: ignore
-            _employee_count=models.Count("employees", distinct=True),
-            _table_count=models.Count("tables", distinct=True)
+            employee_count=models.Count("employees", distinct=True),
+            table_count=models.Count("tables", distinct=True)
         )
 
     @admin.display(description=_("Number of Employees"), ordering="_employee_count")
@@ -197,8 +197,7 @@ class RestaurantAdmin(ModelAdmin):
         if not obj:
             return admin.site.empty_value_display
 
-        # noinspection PyProtectedMember
-        return obj._employee_count  # type: ignore
+        return obj.employee_count  # type: ignore
 
     @admin.display(description=_("Number of Tables (including Sub-Tables)"), ordering="_table_count")
     def table_count(self, obj: Restaurant | None) -> int | str:
@@ -210,8 +209,7 @@ class RestaurantAdmin(ModelAdmin):
         if not obj:
             return admin.site.empty_value_display
 
-        # noinspection PyProtectedMember
-        return obj._table_count  # type: ignore
+        return obj.table_count  # type: ignore
 
 
 @admin.register(Table)
@@ -247,20 +245,29 @@ class TableAdmin(ModelAdmin):
     def get_search_results(self, request: HttpRequest, queryset: QuerySet[Table], search_term: str) -> tuple[QuerySet[Table], bool]:
         # noinspection PyArgumentList
         if request.META.get("HTTP_X_REQUESTED_WITH") == "XMLHttpRequest" and "/autocomplete/" in request.path and request.GET.get("model_name") == "table" and "Referer" in request.headers:
-            try:
-                table_pk: int = int(request.headers["Referer"].strip(r"/").split(r"/")[-2])
-            except ValueError:
-                pass
-            else:
-                queryset = queryset.exclude(pk=table_pk)
-
+            split_referer_url: Sequence[str] = request.headers["Referer"].strip(r"/").split(r"/")
+            if "table" in split_referer_url:
                 try:
-                    # noinspection PyProtectedMember
-                    table: Table = Table._base_manager.get(pk=table_pk)
-                except Table.DoesNotExist:
+                    table_pk: int = int(split_referer_url[split_referer_url.index("table") + 1])
+                except ValueError:
                     pass
                 else:
-                    queryset = queryset.filter(models.Q(container_table__isnull=True) | models.Q(container_table__isnull=False, container_table__restaurant__pk=table.restaurant.pk))
+                    queryset = queryset.exclude(pk=table_pk).filter(models.Q(container_table__isnull=True) | ~models.Q(container_table=table_pk))
+
+                    try:
+                        table: Table = Table.objects.get(pk=table_pk)
+                    except Table.DoesNotExist:
+                        pass
+                    else:
+                        queryset = queryset.filter(restaurant=table.restaurant)
+
+            if "restaurant" in split_referer_url:
+                try:
+                    restaurant_pk: int = int(split_referer_url[split_referer_url.index("restaurant") + 1])
+                except ValueError:
+                    pass
+                else:
+                    queryset = queryset.filter(restaurant=restaurant_pk)
 
         return super().get_search_results(request, queryset, search_term)
 
@@ -279,15 +286,14 @@ class TableAdmin(ModelAdmin):
 
 @admin.register(Seat)
 class SeatAdmin(ModelAdmin):
-    ordering = ("table", "id")
-    fields = ("id", "table")
-    list_display = ("id", "table")
+    ordering = ("table", "location_index")
+    list_display = ("location_index", "table")
     list_filter = (SeatRestaurantListFilter,)
     search_fields = ("table__number", "table__container_table__number", "table__restaurant__name")
     search_help_text = _("Search for a table number or restaurant name")
-    list_display_links = ("id",)
+    list_editable = ("location_index", "table")
+    list_display_links = None
     autocomplete_fields = ("table",)
-    readonly_fields = ("id",)
 
     def get_list_filter(self, request: HttpRequest) -> Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]]:
         list_filter: Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]] = super().get_list_filter(request)
@@ -296,3 +302,53 @@ class SeatAdmin(ModelAdmin):
             list_filter = tuple(obj_filter for obj_filter in list_filter if obj_filter != SeatRestaurantListFilter)
 
         return list_filter
+
+    def get_search_results(self, request: HttpRequest, queryset: QuerySet[Seat], search_term: str) -> tuple[QuerySet[Seat], bool]:
+        # noinspection PyArgumentList,SpellCheckingInspection
+        if request.META.get("HTTP_X_REQUESTED_WITH") == "XMLHttpRequest" and "/autocomplete/" in request.path and request.GET.get("model_name") == "seatbooking" and "Referer" in request.headers:
+            split_referer_url: Sequence[str] = request.headers["Referer"].strip(r"/").split(r"/")
+            if "booking" in split_referer_url:
+                try:
+                    booking_pk: int = int(split_referer_url[split_referer_url.index("booking") + 1])
+                except ValueError:
+                    pass
+                else:
+                    try:
+                        booking: Booking = Booking.objects.get(pk=booking_pk)
+                    except Booking.DoesNotExist:
+                        pass
+                    else:
+                        if booking.restaurant and booking.seat_bookings.count() > 1:
+                            queryset = queryset.filter(table__restaurant=booking.restaurant)
+
+        return super().get_search_results(request, queryset, search_term)
+
+
+@admin.register(Booking)
+class BookingAdmin(ModelAdmin):
+    ordering = ("start",)
+    fields = ("id", ("start", "end"), "restaurant")
+    list_display = ("id", "start", "end", "restaurant")
+    list_filter = (BookingRestaurantListFilter, ("start", DateTimeRangeFilter), ("end", DateTimeRangeFilter))
+    inlines = (BookingSeatBookingsInline,)
+    search_fields = ("seat_bookings__seat__table__number", "seat_bookings__seat__table__container_table__number", "seat_bookings__seat__table__restaurant__name")
+    search_help_text = _("Search for a table number or restaurant name")
+    list_display_links = ("id",)
+    readonly_fields = ("id", "restaurant",)
+
+    def get_list_filter(self, request: HttpRequest) -> Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]]:
+        list_filter: Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]] = super().get_list_filter(request)
+
+        if Restaurant.objects.count() > 15:
+            list_filter = tuple(obj_filter for obj_filter in list_filter if obj_filter != BookingRestaurantListFilter)
+
+        return list_filter
+
+    @admin.display(description=_("Restaurant"))
+    def restaurant(self, obj: Booking | None) -> Restaurant | str:
+        """ Returns the restaurant the tables of this booking are within, to be displayed on the admin page. """
+
+        if not obj or not obj.restaurant:
+            return admin.site.empty_value_display
+
+        return obj.restaurant

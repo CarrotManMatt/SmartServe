@@ -9,7 +9,7 @@ from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 from rangefilter.filters import NumericRangeFilter
 
-from smartserve.models import Restaurant, Table, User
+from smartserve.models import Restaurant, Table, User, Seat, Booking
 
 
 class UserIsStaffListFilter(admin.SimpleListFilter):
@@ -55,14 +55,14 @@ class UserGroupListFilter(admin.SimpleListFilter):
             names of the possible lookups.
         """
 
-        return tuple((str(group.id), _(str(group.name))) for group in Group.objects.all())
+        return tuple((str(group.pk), _(str(group.name))) for group in Group.objects.all())
 
     def queryset(self, request: HttpRequest, queryset: QuerySet[User]) -> QuerySet[User]:
         """ Returns the filtered queryset according to the given url lookup. """
 
-        group_id: str | None = self.value()
-        if group_id:
-            return queryset.filter(groups=group_id)
+        group_pk: str | None = self.value()
+        if group_pk:
+            return queryset.filter(groups=group_pk)
         else:
             return queryset
 
@@ -185,7 +185,7 @@ class BaseRestaurantListFilter(admin.SimpleListFilter):
             names of the possible lookups.
         """
 
-        return tuple((str(restaurant.id), _(str(restaurant.name))) for restaurant in Restaurant.objects.all())
+        return tuple((str(restaurant.pk), _(str(restaurant.name))) for restaurant in Restaurant.objects.all())
 
 
 class TableRestaurantListFilter(BaseRestaurantListFilter):
@@ -197,9 +197,9 @@ class TableRestaurantListFilter(BaseRestaurantListFilter):
     def queryset(self, request: HttpRequest, queryset: QuerySet[Table]) -> QuerySet[Table]:
         """ Returns the filtered queryset according to the given url lookup. """
 
-        restaurant_id: str | None = self.value()
-        if restaurant_id:
-            return queryset.filter(restaurant=restaurant_id)
+        restaurant_pk: str | None = self.value()
+        if restaurant_pk:
+            return queryset.filter(restaurant=restaurant_pk)
         else:
             return queryset
 
@@ -210,11 +210,27 @@ class SeatRestaurantListFilter(BaseRestaurantListFilter):
         admin list view, by the restaurant, the seat's table is within.
     """
 
-    def queryset(self, request: HttpRequest, queryset: QuerySet[Table]) -> QuerySet[Table]:
+    def queryset(self, request: HttpRequest, queryset: QuerySet[Seat]) -> QuerySet[Seat]:
         """ Returns the filtered queryset according to the given url lookup. """
 
-        restaurant_id: str | None = self.value()
-        if restaurant_id:
-            return queryset.filter(table__restaurant=restaurant_id)
+        restaurant_pk: str | None = self.value()
+        if restaurant_pk:
+            return queryset.filter(table__restaurant=restaurant_pk)
+        else:
+            return queryset
+
+
+class BookingRestaurantListFilter(BaseRestaurantListFilter):
+    """
+        Admin filter to limit the :model:`smartserve.booking` objects shown on the
+        admin list view, by the restaurant, the booking's seats are within.
+    """
+
+    def queryset(self, request: HttpRequest, queryset: QuerySet[Booking]) -> QuerySet[Booking]:
+        """ Returns the filtered queryset according to the given url lookup. """
+
+        restaurant_pk: str | None = self.value()
+        if restaurant_pk:
+            return queryset.filter(seat_bookings__seat__table__restaurant=restaurant_pk)
         else:
             return queryset

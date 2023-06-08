@@ -1,9 +1,8 @@
 from django.contrib import admin
-from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 from knox.models import AuthToken
 
-from smartserve.models import Seat, Table
+from smartserve.models import Seat, SeatBooking, Table
 
 
 class UserAuthTokensInline(admin.StackedInline):
@@ -17,6 +16,7 @@ class RestaurantTablesInline(admin.TabularInline):
     model = Table
     verbose_name_plural = _("Tables (including Sub-Tables)")
     readonly_fields = ("true_number",)
+    autocomplete_fields = ("container_table",)
 
     @admin.display(description=_("True Number"))
     def true_number(self, obj: Table | None) -> int | str:
@@ -36,5 +36,9 @@ class TableSeatsInline(admin.StackedInline):
     model = Seat
     verbose_name = _("Direct Seat")
 
-    def has_add_permission(self, _request: HttpRequest, _obj: Seat | None) -> bool:
-        return False
+
+class BookingSeatBookingsInline(admin.StackedInline):
+    extra = 0
+    model = SeatBooking
+    verbose_name = _("Seat")
+    autocomplete_fields = ("seat",)
