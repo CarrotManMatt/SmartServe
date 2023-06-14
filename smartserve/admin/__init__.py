@@ -4,7 +4,7 @@
 
 from typing import Callable, Sequence
 
-from django.contrib import admin, auth
+from django.contrib import admin
 from django.contrib.admin import ModelAdmin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.db import models
@@ -25,7 +25,7 @@ admin.site.index_title = _("Overview")
 admin.site.empty_value_display = "- - - - -"
 
 
-@admin.register(auth.get_user_model())
+@admin.register(User)
 class UserAdmin(DjangoUserAdmin):
     """
         Admin display configuration for :model:`smartserve.user` models, that
@@ -163,7 +163,6 @@ class UserAdmin(DjangoUserAdmin):
 @admin.register(Restaurant)
 class RestaurantAdmin(ModelAdmin):
     fields = ("name", ("employee_count", "employees"), "table_count")
-    filter_horizontal = ("employees",)
     list_display = ("name", "employee_count", "table_count")
     list_filter = (RestaurantEmployeeCountListFilter, RestaurantTableCountListFilter)
     inlines = (RestaurantTablesInline,)

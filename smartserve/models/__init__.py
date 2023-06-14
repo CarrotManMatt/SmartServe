@@ -5,9 +5,9 @@ from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import Permission, PermissionsMixin
 from django.core.exceptions import ValidationError
-from django.core.validators import MinLengthValidator, RegexValidator
+from django.core.validators import MinLengthValidator, MinValueValidator, RegexValidator
 from django.db import models
-from django.db.models import Manager, QuerySet
+from django.db.models import Manager, Model, QuerySet
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -26,10 +26,14 @@ class User(CustomBaseModel, AbstractBaseUser, PermissionsMixin):
         _("Employee ID"),
         unique=True,
         max_length=6,
-        validators=[RegexValidator(r"^\d+\Z"), MinLengthValidator(6)],
+        validators=[
+            RegexValidator(r"^\d+\Z", _("The Employee ID must be a 6 digit number.")),
+            MinLengthValidator(6, _("The Employee ID must be 6 digits."))
+        ],
         default=utils.generate_employee_id,
         error_messages={
-            "unique": _("A user with that ID already exists."),
+            "unique": _("A user with that Employee ID already exists."),
+            "max_length": _("The Employee ID must be 6 digits.")
         },
         blank=True
     )
@@ -109,7 +113,7 @@ class Restaurant(CustomBaseModel):
     name = models.CharField(
         _("Name"),
         max_length=100,
-        validators=[RegexValidator(r"^[A-Za-z ]+\Z"), MinLengthValidator(2)]
+        validators=[RegexValidator(r"^(?![\s'])(?!.*[\s']{2})[A-Za-z ']+(?<![\s'])\Z"), MinLengthValidator(2)]
     )
     employees = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
@@ -131,7 +135,8 @@ class Restaurant(CustomBaseModel):
 
 class Table(CustomBaseModel):
     number = models.PositiveIntegerField(
-        _("Number")
+        _("Number"),
+        validators=[MinValueValidator(1)]
     )
     restaurant = models.ForeignKey(
         Restaurant,
@@ -213,7 +218,7 @@ class Table(CustomBaseModel):
                 else:
                     return all(check_container_table_not_in_sub_tables(sub_table, container_table) for sub_table in table.sub_tables.all())
 
-            if self.container_table and not check_container_table_not_in_sub_tables(self, self.container_table):
+            if self.pk and not check_container_table_not_in_sub_tables(self, self.container_table):
                 raise ValidationError({"container_table": _("The parent container table cannot be a sub-table of this table.")}, code="invalid")
 
     def create_booking(self, start: datetime, end: datetime) -> "Booking":

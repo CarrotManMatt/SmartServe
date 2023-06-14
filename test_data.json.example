@@ -1,0 +1,18 @@
+{
+  "user": {
+    "first_name": [
+      "Jeremy",
+      "Nereo"
+    ],
+    "last_name": [
+      "Mallett",
+      "Montoya"
+    ]
+  },
+  "restaurant": {
+    "name": [
+      "The Swan",
+      "Little Italy"
+    ]
+  }
+}
