@@ -6,9 +6,9 @@ class NotEnoughTestDataError(StopIteration):
 
     DEFAULT_MESSAGE = "Not enough test data values were available, to generate one from the test data JSON file."
 
-    def __init__(self, message: str = None, field_name: str = None) -> None:
+    def __init__(self, message: str | None = None, field_name: str | None = None) -> None:
         self.message: str = message or self.DEFAULT_MESSAGE
-        self.field_name = field_name
+        self.field_name: str | None = field_name
 
         super().__init__(message or self.DEFAULT_MESSAGE)
 

@@ -27,14 +27,14 @@ def user_added_to_restaurant(sender, instance: User | Restaurant, action: str, r
     if action == "pre_add":
         if isinstance(instance, Restaurant) and not reverse:
             user: User
-            for user in model.objects.filter(id__in=pk_set):
+            for user in model.objects.filter(id__in=pk_set):  # type: ignore
                 if instance.employees.filter(first_name=user.first_name, last_name=user.last_name).exclude(id=user.id).exists():
                     # noinspection PyProtectedMember
                     raise IntegrityError(f"UNIQUE constraint failed: {model._meta.app_label}_{model._meta.model_name}.first_name, {model._meta.app_label}_{model._meta.model_name}.last_name, {instance._meta.app_label}_{instance._meta.model_name}.id")
 
         elif isinstance(instance, User) and reverse:
             restaurant: Restaurant
-            for restaurant in model.objects.filter(id__in=pk_set):
+            for restaurant in model.objects.filter(id__in=pk_set):  # type: ignore
                 if restaurant.employees.filter(first_name=instance.first_name, last_name=instance.last_name).exclude(id=instance.id).exists():
                     # noinspection PyProtectedMember
                     raise IntegrityError(f"UNIQUE constraint failed: {model._meta.app_label}_{model._meta.model_name}.first_name, {model._meta.app_label}_{model._meta.model_name}.last_name, {instance._meta.app_label}_{instance._meta.model_name}.id")

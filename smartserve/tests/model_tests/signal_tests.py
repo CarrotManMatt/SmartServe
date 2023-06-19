@@ -5,7 +5,7 @@ from smartserve.tests.utils import TestCase, TestRestaurantFactory, TestUserFact
 
 
 class UserAddedToRestaurantSignalTests(TestCase):
-    def test_non_unique_user_not_added_to_restaurant(self):
+    def test_non_unique_user_not_added_to_restaurant(self) -> None:
         restaurant: Restaurant = TestRestaurantFactory.create()
 
         user_1: User = TestUserFactory.create()
@@ -17,7 +17,7 @@ class UserAddedToRestaurantSignalTests(TestCase):
 
         self.assertNotIn(user_2, restaurant.employees.all())
 
-    def test_non_unique_user_restaurant_not_added(self):
+    def test_non_unique_user_restaurant_not_added(self) -> None:
         restaurant: Restaurant = TestRestaurantFactory.create()
 
         user_1: User = TestUserFactory.create()
@@ -25,6 +25,6 @@ class UserAddedToRestaurantSignalTests(TestCase):
         restaurant.employees.add(user_1)
 
         with transaction.atomic(), self.assertRaisesMessage(IntegrityError, "UNIQUE constraint failed"):
-            user_2.restaurants.add(restaurant)
+            user_2.restaurants.add(restaurant)  # type: ignore
 
         self.assertNotIn(restaurant, user_2.restaurants.all())

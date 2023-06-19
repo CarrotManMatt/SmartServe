@@ -2,7 +2,8 @@ import abc
 import copy
 import itertools
 import json
-from typing import Any, Iterable, Iterator, TypeVar
+from contextlib import AbstractContextManager
+from typing import Any, Iterable, Iterator
 
 from django.conf import settings
 from django.contrib import auth
@@ -12,9 +13,6 @@ from django.test import TestCase as DjangoTestCase
 
 from smartserve.exceptions import NotEnoughTestDataError
 from smartserve.models import Restaurant, Seat, Table, User
-from smartserve.models.utils import CustomBaseModel
-
-MODEL_TYPE = TypeVar("MODEL_TYPE", bound=CustomBaseModel)
 
 UNICODE_IDS: Iterable[int] = itertools.chain(
     range(32, 128),
@@ -99,13 +97,20 @@ UNICODE_IDS: Iterable[int] = itertools.chain(
 )
 
 
-def duplicate_string_to_size(string: str, size: int):
+def duplicate_string_to_size(string: str, size: int, strip: bool = False) -> str:
     if len(string) >= size:
-        return string[:size]
+        shortened_string: str = string[:size]
 
     else:
         partial_string: str = string * (size // len(string))
-        return partial_string + string[:size - len(partial_string)]
+        shortened_string = partial_string + string[:size - len(partial_string)]
+
+    if strip:
+        stripped_shortened_string: str = shortened_string.strip()
+        if stripped_shortened_string != shortened_string:
+            shortened_string = duplicate_string_to_size(stripped_shortened_string, size)
+
+    return shortened_string
 
 
 TEST_DATA: dict[str, dict[str, Iterable[str]]] = {}
@@ -127,24 +132,29 @@ def get_field_test_data(model_name: str, field_name: str) -> Iterable[str]:
 
 
 class TestCase(DjangoTestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         Factory: type[BaseTestDataFactory]
         for Factory in (TestUserFactory, TestRestaurantFactory, TestTableFactory, TestSeatFactory):
             Factory.test_data_iterators = copy.deepcopy(Factory.ORIGINAL_TEST_DATA_ITERATORS)
+
+    def subTest(self, msg: str | None = None, **params) -> AbstractContextManager[None]:
+        self.setUp()
+
+        return super().subTest(msg, **params)
 
 
 class BaseTestDataFactory(abc.ABC):
     """
         Helper class to provide functions that create test object instances of
-        any model within the pulsifi app.
+        any model within the smartserve app.
     """
 
-    MODEL: MODEL_TYPE
+    MODEL: type
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]]
     test_data_iterators: dict[str, Iterator[Any]]
 
     @classmethod
-    def create(cls, *, save=True, **kwargs) -> MODEL_TYPE:
+    def create(cls, *, save: bool = True, **kwargs):
         """
             Helper function that creates & returns a test object instance, with
             additional options for its attributes provided in kwargs. The save
@@ -162,7 +172,7 @@ class BaseTestDataFactory(abc.ABC):
                 if cls.MODEL == auth.get_user_model():
                     return auth.get_user_model().objects.create_user(**kwargs)
                 else:
-                    return cls.MODEL.objects.create(**kwargs)
+                    return cls.MODEL.objects.create(**kwargs)  # type: ignore
             else:
                 # noinspection PyCallingNonCallable
                 return cls.MODEL(**kwargs)
@@ -190,11 +200,11 @@ class TestUserFactory(BaseTestDataFactory):
         :model:`smartserve.user` object instances.
     """
 
-    MODEL: type[CustomBaseModel] = User
+    MODEL: type = User
     # noinspection PyProtectedMember
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {
-        "first_name": iter(get_field_test_data(MODEL._meta.model_name, "first_name")),
-        "last_name": iter(get_field_test_data(MODEL._meta.model_name, "last_name"))
+        "first_name": iter(get_field_test_data(MODEL._meta.model_name or "user", "first_name")),
+        "last_name": iter(get_field_test_data(MODEL._meta.model_name or "user", "last_name"))
     }
 
 
@@ -204,7 +214,7 @@ class TestRestaurantFactory(BaseTestDataFactory):
         :model:`smartserve.restaurant` object instances.
     """
 
-    MODEL: MODEL_TYPE = Restaurant
+    MODEL: type = Restaurant
     # noinspection PyProtectedMember
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {
         "name": iter(get_field_test_data(MODEL._meta.model_name, "name"))
@@ -217,11 +227,11 @@ class TestTableFactory(BaseTestDataFactory):
         :model:`smartserve.table` object instances.
     """
 
-    MODEL: MODEL_TYPE = Table
+    MODEL: type = Table
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {"number": itertools.count(1)}
 
     @classmethod
-    def create(cls, *, save=True, **kwargs) -> MODEL:
+    def create(cls, *, save=True, **kwargs):
         restaurant_kwargs: dict[str, Any] = {}
         for restaurant_field_name in {restaurant_field_name for restaurant_field_name in kwargs.keys() if restaurant_field_name.startswith("restaurant__")}:
             restaurant_kwargs[restaurant_field_name.removeprefix("restaurant__")] = kwargs.pop(restaurant_field_name)
@@ -257,11 +267,11 @@ class TestSeatFactory(BaseTestDataFactory):
         :model:`smartserve.seat` object instances.
     """
 
-    MODEL: MODEL_TYPE = Seat
+    MODEL: type = Seat
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {"location_index": itertools.count(1)}
 
     @classmethod
-    def create(cls, *, save=True, **kwargs) -> MODEL:
+    def create(cls, *, save=True, **kwargs: Any):
         table_kwargs: dict[str, Any] = {}
         for table_field_name in {table_field_name for table_field_name in kwargs.keys() if table_field_name.startswith("table__")}:
             table_kwargs[table_field_name.removeprefix("table__")] = kwargs.pop(table_field_name)
