@@ -165,27 +165,46 @@ class Table(CustomBaseModel):
             return self.number
 
     @property
-    def seats(self) -> QuerySet["Seat"]:
-        def get_sub_table_seats(table: Table) -> QuerySet[Seat]:
-            # noinspection PyProtectedMember
-            seats: QuerySet[Seat] = table._seats.all()
-
-            if table.sub_tables.exists():
-                sub_table: Table
-                for sub_table in table.sub_tables.all():
-                    seats = seats | get_sub_table_seats(sub_table)
-
-            return seats
-
+    def seats(self) -> Manager["Seat"]:
         if not self.container_table:
-            return get_sub_table_seats(self)
+            class SeatManager(Manager):
+                def __init__(self, table: Table):
+                    self.table: Table = table
+
+                    super().__init__()
+
+                def get_queryset(self) -> QuerySet[Seat]:
+                    return self.get_sub_table_seats(self.table)
+
+                @classmethod
+                def get_sub_table_seats(cls, table: Table) -> QuerySet[Seat]:
+                    # noinspection PyProtectedMember
+                    seats: QuerySet[Seat] = table._seats.all()
+
+                    if table.sub_tables.exists():
+                        sub_table: Table
+                        for sub_table in table.sub_tables.all():
+                            seats = seats | cls.get_sub_table_seats(sub_table)
+
+                    return seats
+
+            return SeatManager(table=self)
 
         else:
-            return self._seats.all()
+            return self._seats
 
     @property
-    def bookings(self) -> QuerySet["Booking"]:
-        return Booking.objects.filter(pk__in=self.seats.values_list("seat_bookings__booking__pk", flat=True))
+    def bookings(self) -> Manager["Booking"]:
+        class BookingManager(Manager):
+            def __init__(self, seats: QuerySet[Seat]):
+                self.seats: QuerySet[Seat] = seats
+
+                super().__init__()
+
+            def get_queryset(self) -> QuerySet[Seat]:
+                return Booking.objects.filter(pk__in=self.seats.values_list("seat_bookings__booking__pk", flat=True))
+
+        return BookingManager(self.seats.all())
 
     class Meta:
         verbose_name = _("Table")
@@ -269,11 +288,20 @@ class Booking(CustomBaseModel):
     end = models.DateTimeField(_("End Date & Time"))
 
     @property
-    def tables(self) -> QuerySet[Table]:
+    def tables(self) -> Manager[Table]:
         if not self.pk:
             raise ValueError(f"{self.__class__.__name__!r} instance needs to have a primary key value before this relationship can be used.")
 
-        return Table.objects.filter(pk__in=self.seat_bookings.values_list("seat__table__pk", flat=True))
+        class TableManager(Manager):
+            def __init__(self, seat_bookings: QuerySet[SeatBooking]):
+                self.seat_bookings: QuerySet[SeatBooking] = seat_bookings
+
+                super().__init__()
+
+            def get_queryset(self) -> QuerySet[Seat]:
+                return Table.objects.filter(pk__in=self.seat_bookings.values_list("seat__table__pk", flat=True))
+
+        return TableManager(self.seat_bookings.all())
 
     @property
     def restaurant(self) -> Restaurant | None:
