@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from smartserve.models import Booking, Restaurant, Seat, Table, User
 from smartserve.tests import utils
-from smartserve.tests.utils import TestCase, TestRestaurantFactory, TestSeatFactory, TestTableFactory, TestUserFactory
+from smartserve.tests.utils import TestBookingFactory, TestCase, TestRestaurantFactory, TestSeatBookingFactory, TestSeatFactory, TestTableFactory, TestUserFactory
 
 
 class UserModelTests(TestCase):
@@ -245,7 +245,7 @@ class TableModelTests(TestCase):
         )
 
     def test_seats_with_child_tables_and_with_container_table(self) -> None:
-        table: Table = TestTableFactory.create(container_table__number=TestTableFactory.create_field_value("number"))
+        table: Table = TestTableFactory.create(container_table=TestTableFactory.create())
         TestSeatFactory.create(table=table)
         TestSeatFactory.create(table=table)
 
@@ -261,8 +261,23 @@ class TableModelTests(TestCase):
             ordered=False
         )
 
-    def test_bookings(self) -> None:  # TODO
-        raise NotImplementedError
+    def test_bookings(self) -> None:
+        table: Table = TestTableFactory.create()
+
+        booking_pks: set[int] = {
+            TestSeatBookingFactory.create(seat__table=table).pk,
+            TestSeatBookingFactory.create(seat__table=table).pk,
+            TestSeatBookingFactory.create(seat__table=table).pk
+        }
+
+        TestSeatBookingFactory.create()
+        TestSeatBookingFactory.create()
+
+        self.assertQuerysetEqual(
+            Booking.objects.filter(pk__in=booking_pks),
+            table.bookings.all(),
+            ordered=False
+        )
 
     def test_str(self) -> None:
         table: Table = TestTableFactory.create()
@@ -298,17 +313,16 @@ class TableModelTests(TestCase):
                     table.update(container_table=invalid_container_table)
 
     def test_create_booking(self) -> None:
-        start: datetime = timezone.now()
-        end: datetime = start + timedelta(hours=2)
+        start_end_pair: tuple[datetime, datetime] = TestBookingFactory.create_field_value("start_end_pair")
         table: Table = TestTableFactory.create()
         TestSeatFactory.create(table=table)
         TestSeatFactory.create(table=table)
 
-        booking: Booking = table.create_booking(start, end)
+        booking: Booking = table.create_booking(start_end_pair[0], start_end_pair[1])
 
         self.assertIsInstance(booking, Booking)
-        self.assertEqual(start, booking.start)
-        self.assertEqual(end, booking.end)
+        self.assertEqual(start_end_pair[0], booking.start)
+        self.assertEqual(start_end_pair[1], booking.end)
         self.assertQuerysetEqual(
             Seat.objects.filter(pk__in=booking.seat_bookings.values_list("pk", flat=True)),
             table.seats.all(),

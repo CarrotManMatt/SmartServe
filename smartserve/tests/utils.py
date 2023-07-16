@@ -2,17 +2,21 @@ import abc
 import copy
 import itertools
 import json
+import random
 from contextlib import AbstractContextManager
+from datetime import datetime
 from typing import Any, Iterable, Iterator
 
 from django.conf import settings
 from django.contrib import auth
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import IntegrityError
+from django.db.models import Model
 from django.test import TestCase as DjangoTestCase
+from django.utils import timezone
 
 from smartserve.exceptions import NotEnoughTestDataError
-from smartserve.models import Restaurant, Seat, Table, User
+from smartserve.models import Booking, Restaurant, Seat, SeatBooking, Table, User
 
 UNICODE_IDS: Iterable[int] = itertools.chain(
     range(32, 128),
@@ -134,7 +138,7 @@ def get_field_test_data(model_name: str, field_name: str) -> Iterable[str]:
 class TestCase(DjangoTestCase):
     def setUp(self) -> None:
         Factory: type[BaseTestDataFactory]
-        for Factory in (TestUserFactory, TestRestaurantFactory, TestTableFactory, TestSeatFactory):
+        for Factory in (TestUserFactory, TestRestaurantFactory, TestTableFactory, TestSeatFactory, TestBookingFactory, TestSeatBookingFactory):
             Factory.test_data_iterators = copy.deepcopy(Factory.ORIGINAL_TEST_DATA_ITERATORS)
 
     def subTest(self, msg: str | None = None, **params) -> AbstractContextManager[None]:
@@ -149,14 +153,14 @@ class BaseTestDataFactory(abc.ABC):
         any model within the smartserve app.
     """
 
-    MODEL: type
+    MODEL: type[Model]
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]]
     test_data_iterators: dict[str, Iterator[Any]]
 
     @classmethod
     def create(cls, *, save: bool = True, **kwargs):
         """
-            Helper function that creates & returns a test object instance, with
+            Helper function that creates & returns a test object instance with
             additional options for its attributes provided in kwargs. The save
             argument declares whether the object instance should be saved to
             the database or not.
@@ -200,7 +204,7 @@ class TestUserFactory(BaseTestDataFactory):
         :model:`smartserve.user` object instances.
     """
 
-    MODEL: type = User
+    MODEL: type[Model] = User
     # noinspection PyProtectedMember
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {
         "first_name": iter(get_field_test_data(MODEL._meta.model_name or "user", "first_name")),
@@ -214,7 +218,7 @@ class TestRestaurantFactory(BaseTestDataFactory):
         :model:`smartserve.restaurant` object instances.
     """
 
-    MODEL: type = Restaurant
+    MODEL: type[Model] = Restaurant
     # noinspection PyProtectedMember
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {
         "name": iter(get_field_test_data(MODEL._meta.model_name, "name"))
@@ -227,14 +231,15 @@ class TestTableFactory(BaseTestDataFactory):
         :model:`smartserve.table` object instances.
     """
 
-    MODEL: type = Table
+    MODEL: type[Model] = Table
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {"number": itertools.count(1)}
 
     @classmethod
     def create(cls, *, save=True, **kwargs):
         restaurant_kwargs: dict[str, Any] = {}
-        for restaurant_field_name in {restaurant_field_name for restaurant_field_name in kwargs.keys() if restaurant_field_name.startswith("restaurant__")}:
-            restaurant_kwargs[restaurant_field_name.removeprefix("restaurant__")] = kwargs.pop(restaurant_field_name)
+        for restaurant_field_name in copy.copy(kwargs).keys():
+            if restaurant_field_name.startswith("restaurant__"):
+                restaurant_kwargs[restaurant_field_name.removeprefix("restaurant__")] = kwargs.pop(restaurant_field_name)
 
         if "restaurant" in kwargs and restaurant_kwargs:
             raise ValueError("Invalid arguments supplied: choose one of \"restaurant\" instance or \"restaurant__\" attributes.")
@@ -246,8 +251,9 @@ class TestTableFactory(BaseTestDataFactory):
                 kwargs.setdefault("restaurant", TestRestaurantFactory.create(**restaurant_kwargs))
 
         container_table_kwargs: dict[str, Any] = {}
-        for container_table_field_name in {container_table_field_name for container_table_field_name in kwargs.keys() if container_table_field_name.startswith("container_table__")}:
-            container_table_kwargs[container_table_field_name.removeprefix("container_table__")] = kwargs.pop(container_table_field_name)
+        for container_table_field_name in copy.copy(kwargs).keys():
+            if container_table_field_name.startswith("container_table__"):
+                container_table_kwargs[container_table_field_name.removeprefix("container_table__")] = kwargs.pop(container_table_field_name)
 
         if "container_table" in kwargs and container_table_kwargs:
             raise ValueError("Invalid arguments supplied: choose one of \"container_table\" instance or \"container_table__\" attributes.")
@@ -267,19 +273,92 @@ class TestSeatFactory(BaseTestDataFactory):
         :model:`smartserve.seat` object instances.
     """
 
-    MODEL: type = Seat
+    MODEL: type[Model] = Seat
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {"location_index": itertools.count(1)}
 
     @classmethod
     def create(cls, *, save=True, **kwargs: Any):
         table_kwargs: dict[str, Any] = {}
-        for table_field_name in {table_field_name for table_field_name in kwargs.keys() if table_field_name.startswith("table__")}:
-            table_kwargs[table_field_name.removeprefix("table__")] = kwargs.pop(table_field_name)
+        for table_field_name in copy.copy(kwargs).keys():
+            if table_field_name.startswith("table__"):
+                table_kwargs[table_field_name.removeprefix("table__")] = kwargs.pop(table_field_name)
 
         if "table" in kwargs and table_kwargs:
             raise ValueError("Invalid arguments supplied: choose one of \"table\" instance or \"table__\" attributes.")
 
         if "table" not in kwargs:
             kwargs.setdefault("table", TestTableFactory.create(**table_kwargs))
+
+        return super().create(save=save, **kwargs)
+
+
+class TestBookingFactory(BaseTestDataFactory):
+    """
+        Helper class to provide functions that create test data for
+        :model:`smartserve.booking` object instances.
+    """
+
+    MODEL: type[Model] = Booking
+    ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {}
+
+    @classmethod
+    def create(cls, *, save=True, **kwargs: Any):
+        start_end_pair: tuple[datetime, datetime] = cls.create_field_value("start_end_pair")
+
+        kwargs.setdefault("start", start_end_pair[0])
+        kwargs.setdefault("end", start_end_pair[1])
+
+        return super().create(save=save, **kwargs)
+
+    @classmethod
+    def create_field_value(cls, field_name: str) -> Any:
+        """
+            Helper function to return a new arbitrary value for the given field
+            name.
+        """
+
+        if field_name == "start_end_pair":
+            time_stamp: float = random.uniform(0, 2524607999.999)
+            return datetime.fromtimestamp(time_stamp, timezone.get_current_timezone()), datetime.fromtimestamp(time_stamp + random.uniform(600, 32400), timezone.get_current_timezone())
+        else:
+            try:
+                return next(cls.test_data_iterators[field_name])
+            except StopIteration as test_data_iterator_error:
+                raise NotEnoughTestDataError(field_name=field_name) from test_data_iterator_error
+
+
+class TestSeatBookingFactory(BaseTestDataFactory):
+    # noinspection SpellCheckingInspection
+    """
+        Helper class to provide functions that create test data for
+        :model:`smartserve.seatbooking` object instances.
+    """
+
+    MODEL: type[Model] = SeatBooking
+    ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {}
+
+    @classmethod
+    def create(cls, *, save=True, **kwargs):
+        seat_kwargs: dict[str, Any] = {}
+        for seat_field_name in copy.copy(kwargs).keys():
+            if seat_field_name.startswith("seat__"):
+                seat_kwargs[seat_field_name.removeprefix("seat__")] = kwargs.pop(seat_field_name)
+
+        if "seat" in kwargs and seat_kwargs:
+            raise ValueError("Invalid arguments supplied: choose one of \"seat\" instance or \"seat__\" attributes.")
+
+        if "seat" not in kwargs:
+            kwargs.setdefault("seat", TestSeatFactory.create(**seat_kwargs))
+
+        booking_kwargs: dict[str, Any] = {}
+        for booking_field_name in copy.copy(kwargs).keys():
+            if booking_field_name.startswith("booking__"):
+                booking_kwargs[booking_field_name.removeprefix("booking__")] = kwargs.pop(booking_field_name)
+
+        if "booking" in kwargs and booking_kwargs:
+            raise ValueError("Invalid arguments supplied: choose one of \"booking\" instance or \"booking__\" attributes.")
+
+        if "booking" not in kwargs:
+            kwargs.setdefault("booking", TestBookingFactory.create(**booking_kwargs))
 
         return super().create(save=save, **kwargs)

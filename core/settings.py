@@ -12,7 +12,7 @@ from django.core.exceptions import ImproperlyConfigured
 from environ import Env
 
 
-BASE_DIR: Path = Path(__file__).resolve().parent.parent  # NOTE: Build paths inside the project like this: BASE_DIR / "subdir"
+BASE_DIR = Path(__file__).resolve().parent.parent  # NOTE: Build paths inside the project like this: BASE_DIR / "subdir"
 
 
 Env.read_env(BASE_DIR / ".env")
@@ -64,9 +64,9 @@ if not 1.0 <= env("AUTH_TOKEN_MINIMUM_REFRESH_INTERVAL"):
 if not env("API_RESPONSE_PAGINATION_SIZE") > 0:
     raise ImproperlyConfigured("API_RESPONSE_PAGINATION_SIZE must be an integer greater than 0.")
 
-log_level_choices: Iterable[str] = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+log_level_choices: Sequence[str] = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 if log_level not in log_level_choices:
-    raise ImproperlyConfigured(f"LOG_LEVEL must be one of {log_level_choices}.")
+    raise ImproperlyConfigured(f"""LOG_LEVEL must be one of {",".join(f'"{log_level_choice}"' for log_level_choice in log_level_choices[:-1])} or \"{log_level_choices[-1]}\".""")
 
 
 # Django REST Framework settings
@@ -86,9 +86,7 @@ REST_KNOX = {
 
 # Tests settings
 
-TEST_DATA_JSON_FILE_PATH = None
-if env("TEST_DATA_JSON_FILE_PATH"):
-    TEST_DATA_JSON_FILE_PATH = Path(env("TEST_DATA_JSON_FILE_PATH"))
+TEST_DATA_JSON_FILE_PATH = Path(env("TEST_DATA_JSON_FILE_PATH")) if env("TEST_DATA_JSON_FILE_PATH") else None
 
 
 # Logging settings

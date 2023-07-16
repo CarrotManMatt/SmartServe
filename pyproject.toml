@@ -1,8 +1,9 @@
 [tool.poetry]
 name = "SmartServe"
 version = "0.0.1"
-description = ""
+description = "SmartServe is a sophisticated restaurant ordering system designed for table service restaurants. It leverages AI to streamline the order-taking process, improve efficiency, and enhance the dining experience."
 authors = ["CarrotManMatt <matt@carrotmanmatt.com>"]
+repository = "https://github.com/CarrotManMatt/SmartServe.git"
 keywords = ["django-rest-framework"]
 classifiers = [
     "Private :: Do Not Upload",
@@ -15,16 +16,16 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.11.3"
-django = "4.2.1"
+django = "4.2.3"
 djangorestframework = "^3.14.0"
 django-rest-knox = "^4.2.0"
 django-environ = "^0.10.0"
 django-admin-rangefilter = "^0.10.0"
 
 [tool.poetry.group.dev.dependencies]
-mypy = "^1.3"
-django-stubs = {extras = ["compatible-mypy"], version = "4.2.1"}
-djangorestframework-stubs = {extras = ["compatible-mypy"], version = "^3.14.0"}
+mypy = "^1.4"
+django-stubs = {extras = ["compatible-mypy"], version = "4.2.3"}
+djangorestframework-stubs = {extras = ["compatible-mypy"], version = "^3.14.2"}
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]

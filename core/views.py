@@ -48,7 +48,7 @@ class LoginView(KnoxLoginView):  # type: ignore
     """
         Customised login view to accept all users.
 
-        (Login is done by POST request rather than authorization headers.)
+        (Login is done by POST request rather than authorisation headers.)
     """
 
     permission_classes: Sequence[type[BasePermission]] = [AllowAny]
