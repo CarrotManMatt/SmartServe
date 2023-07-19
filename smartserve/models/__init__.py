@@ -286,8 +286,16 @@ class Seat(CustomBaseModel):
 
 
 class Booking(CustomBaseModel):
-    start = models.DateTimeField(_("Start Date & Time"))
-    end = models.DateTimeField(_("End Date & Time"))
+    start = models.DateTimeField(
+        _("Start Date & Time"),
+        blank=False,
+        null=False
+    )
+    end = models.DateTimeField(
+        _("End Date & Time"),
+        blank=False,
+        null=False
+    )
 
     @property
     def restaurant(self) -> Restaurant | None:
@@ -357,8 +365,8 @@ class SeatBooking(CustomBaseModel):
         ]
 
     def clean(self) -> None:
-        if self.booking.pk and self.booking.restaurant and self.seat.table.restaurant != self.booking.restaurant:
-            raise ValidationError("The tables within this Booking must all be at the same restaurant", code="invalid")
+        if self.booking_id and self.booking.restaurant and self.seat.table.restaurant != self.booking.restaurant:
+            raise ValidationError("The tables within this Booking must all be at the same restaurant.", code="invalid")
 
-        if SeatBooking.objects.exclude(booking=self.booking).filter(seat__table=self.seat.table).exclude(booking__start__gte=self.booking.end).exclude(booking__end__lte=self.booking.start).exists():
+        if self.booking_id and self.seat_id and SeatBooking.objects.exclude(booking=self.booking).filter(seat__table=self.seat.table).exclude(booking__start__gte=self.booking.end).exclude(booking__end__lte=self.booking.start).exists():
             raise ValidationError({"seat": "A booking for this seat's table already exists within these start & end points."}, code="unique")

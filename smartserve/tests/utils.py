@@ -318,10 +318,11 @@ class TestBookingFactory(BaseTestDataFactory):
 
     @classmethod
     def create(cls, *, save: bool = True, **kwargs: Any) -> Booking:
-        start_end_pair: tuple[datetime, datetime] = cls.create_field_value("start_end_pair")
+        if ("start" in kwargs and "end" not in kwargs) or ("start" not in kwargs and "end" in kwargs):
+            raise ValueError("Both \"start\" and \"end\" values must be passed to create a Booking.")
 
-        kwargs.setdefault("start", start_end_pair[0])
-        kwargs.setdefault("end", start_end_pair[1])
+        elif "start" not in kwargs and "end" not in kwargs:
+            kwargs["start"], kwargs["end"] = cls.create_field_value("start_end_pair")
 
         return super().create(save=save, **kwargs)
 

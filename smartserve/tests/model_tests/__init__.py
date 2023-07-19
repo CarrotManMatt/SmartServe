@@ -1,10 +1,12 @@
+import random
 from datetime import datetime, timedelta
 from typing import Any, Iterable
 
 from django.core.exceptions import ValidationError
+from django.db.models import Manager
 from django.utils import timezone
 
-from smartserve.models import Booking, Restaurant, Seat, Table, User
+from smartserve.models import Booking, Restaurant, Seat, SeatBooking, Table, User
 from smartserve.tests import utils
 from smartserve.tests.utils import TestBookingFactory, TestCase, TestRestaurantFactory, TestSeatBookingFactory, TestSeatFactory, TestTableFactory, TestUserFactory
 
@@ -232,6 +234,11 @@ class TableModelTests(TestCase):
 
         self.assertEqual(container_table_number, table.true_number)
 
+    def test_seats_is_manager(self) -> None:
+        table: Table = TestTableFactory.create()
+
+        self.assertIsInstance(table.seats, Manager)
+
     def test_seats_without_child_tables(self) -> None:
         table: Table = TestTableFactory.create()
         TestSeatFactory.create(table=table)
@@ -292,6 +299,11 @@ class TableModelTests(TestCase):
     def test_seats_without_pk(self) -> None:
         with self.assertRaisesMessage(ValueError, "'Table' instance needs to have a primary key"):
             TestTableFactory.create(save=False).seats.all()
+
+    def test_bookings_is_manager(self) -> None:
+        table: Table = TestTableFactory.create()
+
+        self.assertIsInstance(table.bookings, Manager)
 
     def test_bookings_with_pk(self) -> None:
         table: Table = TestTableFactory.create()
@@ -409,3 +421,146 @@ class SeatModelTests(TestCase):
 
         self.assertIn(str(seat.location_index), str(seat))
         self.assertIn(str(seat.table.number), str(seat))
+
+
+class BookingModelTests(TestCase):
+    def test_start_validate_required(self) -> None:
+        start_end_pair: tuple[datetime, datetime] = TestBookingFactory.create_field_value("start_end_pair")
+
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestBookingFactory.create(start=None, end=start_end_pair[1])
+
+    def test_start_validate_before_end(self) -> None:
+        time_stamp: float = random.uniform(0, 2524607999.999)
+
+        with self.assertRaisesMessage(ValidationError, "Start Date & Time must be before End"):
+            TestBookingFactory.create(
+                start=datetime.fromtimestamp(
+                    time_stamp + 1000,
+                    timezone.get_current_timezone()
+                ),
+                end=datetime.fromtimestamp(
+                    time_stamp,
+                    timezone.get_current_timezone()
+                )
+            )
+
+    def test_end_validate_required(self) -> None:
+        start_end_pair: tuple[datetime, datetime] = TestBookingFactory.create_field_value("start_end_pair")
+
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestBookingFactory.create(start=start_end_pair[0], end=None)
+
+    def test_restaurant_without_tables(self) -> None:
+        booking: Booking = TestBookingFactory.create()
+
+        self.assertIsNone(booking.restaurant)
+
+    def test_restaurant_with_tables(self) -> None:
+        booking: Booking = TestBookingFactory.create()
+
+        restaurant: Restaurant = TestSeatBookingFactory.create(
+            booking=booking
+        ).seat.table.restaurant
+        TestSeatBookingFactory.create(
+            booking=booking,
+            seat__table__restaurant=restaurant
+        )
+
+        self.assertEqual(restaurant, booking.restaurant)
+
+    def test_tables_is_manager(self) -> None:
+        booking: Booking = TestBookingFactory.create()
+
+        self.assertIsInstance(booking.tables, Manager)
+
+    def test_tables_with_pk(self) -> None:
+        booking: Booking = TestBookingFactory.create()
+        restaurant: Restaurant = TestRestaurantFactory.create()
+
+        table_pks: set[int] = {
+            TestSeatBookingFactory.create(
+                booking=booking,
+                seat__table__restaurant=restaurant
+            ).seat.table.pk,
+            TestSeatBookingFactory.create(
+                booking=booking,
+                seat__table__restaurant=restaurant
+            ).seat.table.pk,
+            TestSeatBookingFactory.create(
+                booking=booking,
+                seat__table__restaurant=restaurant
+            ).seat.table.pk
+        }
+
+        TestSeatBookingFactory.create(seat__table__restaurant=restaurant)
+        TestSeatBookingFactory.create(seat__table__restaurant=restaurant)
+
+        self.assertQuerysetEqual(
+            Table.objects.filter(pk__in=table_pks),
+            booking.tables.all(),
+            ordered=False
+        )
+
+    def test_tables_without_pk(self) -> None:
+        with self.assertRaisesMessage(ValueError, "'Booking' instance needs to have a primary key"):
+            TestBookingFactory.create(save=False).tables.all()
+
+    def test_str(self) -> None:
+        booking: Booking = TestBookingFactory.create()
+
+        self.assertIn(str(booking.id), str(booking))
+
+
+class SeatBookingModelTests(TestCase):
+    def test_seat_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestSeatBookingFactory.create(seat=None)
+
+    def test_booking_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestSeatBookingFactory.create(booking=None)
+
+    def test_seat_unique_per_booking(self) -> None:
+        seat_booking: SeatBooking = TestSeatBookingFactory.create()
+
+        with self.assertRaisesMessage(ValidationError, "this Seat and Booking already exists"):
+            TestSeatBookingFactory.create(
+                seat=seat_booking.seat,
+                booking=seat_booking.booking
+            )
+
+        try:
+            TestSeatBookingFactory.create(
+                seat=seat_booking.seat,
+                booking=TestBookingFactory.create()
+            )
+        except ValidationError as validate_error:
+            self.fail(f"ValidationError raised: {validate_error}")
+
+        try:
+            TestSeatBookingFactory.create(
+                seat=TestSeatFactory.create(table__restaurant=seat_booking.seat.table.restaurant),
+                booking=seat_booking.booking
+            )
+        except ValidationError as validate_error:
+            self.fail(f"ValidationError raised: {validate_error}")
+
+    def test_validate_table_restaurant_is_booking_restaurant(self) -> None:
+        seat_booking: SeatBooking = TestSeatBookingFactory.create()
+
+        with self.assertRaisesMessage(ValidationError, "same restaurant"):
+            TestSeatBookingFactory.create(
+                booking=seat_booking.booking,
+                seat__table=TestTableFactory.create()
+            )
+
+    def test_seat_validate_no_bookings_for_table_at_conflicting_time(self) -> None:
+        seat_booking: SeatBooking = TestSeatBookingFactory.create()
+
+        with self.assertRaisesMessage(ValidationError, "booking for this seat's table already exists within these start & end"):
+            TestSeatBookingFactory.create(
+                seat__table=seat_booking.seat.table,
+                booking__start=seat_booking.booking.start + timedelta(seconds=15),
+                booking__end=seat_booking.booking.end - timedelta(seconds=15)
+            )
