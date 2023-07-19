@@ -2,7 +2,7 @@
     Admin configurations for models in smartserve app.
 """
 
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
 
 from django.contrib import admin
 from django.contrib.admin import ModelAdmin
@@ -137,15 +137,13 @@ class UserAdmin(DjangoUserAdmin):
 
         return obj.last_login.strftime("%d %b %Y %I:%M:%S %p")
 
-    def get_form(self, *args, **kwargs) -> type[ModelForm]:
+    def get_form(self, *args: Any, **kwargs: Any) -> type[ModelForm]:
         """
             Return a Form class for use in the admin add view. This is used by
             add_view and change_view.
-
-            Changes the labels on the form to remove unnecessary clutter.
         """
 
-        kwargs.update(
+        kwargs.update(  # NOTE: Change the labels on the form to remove unnecessary clutter
             {
                 "labels": {"password": _("Hashed password string")},
                 "help_texts": {
@@ -176,9 +174,6 @@ class RestaurantAdmin(ModelAdmin):
             Return a QuerySet of all :model:`smartserve.restaurant` model
             instances that can be edited by the admin site. This is used by
             changelist_view.
-
-            Adds the calculated annotated field "employee_count" to the
-            queryset.
         """
 
         return super().get_queryset(request).annotate(  # type: ignore

@@ -4,7 +4,7 @@
 
 from django import dispatch
 from django.db import IntegrityError
-from django.db.models import signals
+from django.db.models import Model, signals
 
 from smartserve.models import Restaurant, User
 
@@ -17,7 +17,7 @@ def ready() -> None:
 
 # noinspection PyUnusedLocal
 @dispatch.receiver(signals.m2m_changed, sender=Restaurant.employees.through)
-def user_added_to_restaurant(sender, instance: User | Restaurant, action: str, reverse: bool, model: type[User | Restaurant], pk_set: set[int], **_kwargs) -> None:
+def user_added_to_restaurant(sender: Model, instance: User | Restaurant, action: str, reverse: bool, model: type[User | Restaurant], pk_set: set[int], **_kwargs: str) -> None:
     """
         Event handler for when a user is added to a restaurant's list of
         employees. The user's full name should be unique among that restaurant's

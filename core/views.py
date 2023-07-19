@@ -2,7 +2,7 @@
     Views for direct use in core app.
 """
 
-from typing import Sequence
+from typing import Any, Callable, Sequence, Union
 
 from django import urls as django_urls
 from django.contrib import auth
@@ -21,7 +21,9 @@ class AdminDocsRedirectView(RedirectView):
         subpath).
     """
 
-    def get_redirect_url(self, *args, **kwargs) -> str:
+    _get_redirect_url_types = Union[str, Sequence, dict[str, Any], None, Callable]
+
+    def get_redirect_url(self, *args: _get_redirect_url_types, **kwargs: _get_redirect_url_types) -> str:
         """
             Return the URL redirect to. Keyword arguments from the URL pattern
             match generating the redirect request are provided as kwargs to

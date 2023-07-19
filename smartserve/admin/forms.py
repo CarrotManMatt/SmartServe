@@ -1,3 +1,5 @@
+from typing import Any
+
 from django import forms
 from django.contrib.admin import widgets
 from django.contrib.auth.forms import UserChangeForm as DjangoUserChangeForm
@@ -17,7 +19,7 @@ class UserChangeForm(DjangoUserChangeForm):
         help_text=_("The set of restaurants that this user is employed at. (Hold down “Control”, or “Command” on a Mac, to select more than one.)")
     )
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
         if self.instance and self.instance.pk:

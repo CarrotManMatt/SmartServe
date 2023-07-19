@@ -12,8 +12,7 @@ class SmartServeConfig(AppConfig):
     name = "smartserve"
     verbose_name = "SmartServe"
 
-    @staticmethod
-    def ready(**kwargs) -> None:
+    def ready(self) -> None:
         """
             Import function that ensures the signal handlers within this app
             are loaded and waiting for signals to be sent.

@@ -45,7 +45,7 @@ class CustomBaseModel(Model):
         for proxy_field_name, value in proxy_fields.items():
             setattr(self, proxy_field_name, value)
 
-    def save(self, *args, **kwargs) -> None:
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """
             Saves the current instance to the database, only after the model
             has been cleaned. This ensures any data in the database is valid,

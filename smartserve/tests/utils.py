@@ -141,7 +141,7 @@ class TestCase(DjangoTestCase):
         for Factory in (TestUserFactory, TestRestaurantFactory, TestTableFactory, TestSeatFactory, TestBookingFactory, TestSeatBookingFactory):
             Factory.set_up()
 
-    def subTest(self, msg: str | None = None, **params) -> AbstractContextManager[None]:
+    def subTest(self, msg: str | None = None, **params: Any) -> AbstractContextManager[None]:
         self.setUp()
 
         return super().subTest(msg, **params)
@@ -218,6 +218,10 @@ class TestUserFactory(BaseTestDataFactory):
         "last_name": iter(get_field_test_data(MODEL._meta.model_name or "user", "last_name"))
     }
 
+    @classmethod
+    def create(cls, *, save: bool = True, **kwargs: Any) -> User:
+        return super().create(save=save, **kwargs)
+
 
 class TestRestaurantFactory(BaseTestDataFactory):
     """
@@ -231,6 +235,10 @@ class TestRestaurantFactory(BaseTestDataFactory):
         "name": iter(get_field_test_data(MODEL._meta.model_name or "restaurant", "name"))
     }
 
+    @classmethod
+    def create(cls, *, save: bool = True, **kwargs: Any) -> Restaurant:
+        return super().create(save=save, **kwargs)
+
 
 class TestTableFactory(BaseTestDataFactory):
     """
@@ -242,7 +250,7 @@ class TestTableFactory(BaseTestDataFactory):
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {"number": itertools.count(1)}
 
     @classmethod
-    def create(cls, *, save=True, **kwargs) -> Table:
+    def create(cls, *, save: bool = True, **kwargs: Any) -> Table:
         restaurant_kwargs: dict[str, Any] = {}
         for restaurant_field_name in copy.copy(kwargs).keys():
             if restaurant_field_name.startswith("restaurant__"):
@@ -284,7 +292,7 @@ class TestSeatFactory(BaseTestDataFactory):
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {"location_index": itertools.count(1)}
 
     @classmethod
-    def create(cls, *, save=True, **kwargs: Any) -> Seat:
+    def create(cls, *, save: bool = True, **kwargs: Any) -> Seat:
         table_kwargs: dict[str, Any] = {}
         for table_field_name in copy.copy(kwargs).keys():
             if table_field_name.startswith("table__"):
@@ -309,7 +317,7 @@ class TestBookingFactory(BaseTestDataFactory):
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {}
 
     @classmethod
-    def create(cls, *, save=True, **kwargs: Any) -> Booking:
+    def create(cls, *, save: bool = True, **kwargs: Any) -> Booking:
         start_end_pair: tuple[datetime, datetime] = cls.create_field_value("start_end_pair")
 
         kwargs.setdefault("start", start_end_pair[0])
@@ -345,7 +353,7 @@ class TestSeatBookingFactory(BaseTestDataFactory):
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {}
 
     @classmethod
-    def create(cls, *, save=True, **kwargs) -> SeatBooking:
+    def create(cls, *, save: bool = True, **kwargs: Any) -> SeatBooking:
         seat_kwargs: dict[str, Any] = {}
         for seat_field_name in copy.copy(kwargs).keys():
             if seat_field_name.startswith("seat__"):

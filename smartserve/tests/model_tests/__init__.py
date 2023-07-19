@@ -67,11 +67,11 @@ class UserModelTests(TestCase):
         for char_field_name in ("first_name", "last_name"):
             with self.subTest("Null value provided", char_field_name=char_field_name):
                 with self.assertRaisesMessage(ValidationError, "field cannot be null"):
-                    TestUserFactory.create(**{char_field_name: None})
+                    TestUserFactory.create(**{char_field_name: None})  # type: ignore
 
             with self.subTest("Blank value provided", char_field_name=char_field_name):
                 with self.assertRaisesMessage(ValidationError, "field cannot be blank"):
-                    TestUserFactory.create(**{char_field_name: ""})
+                    TestUserFactory.create(**{char_field_name: ""})  # type: ignore
 
     def test_date_joined_is_now(self) -> None:
         now: datetime = timezone.now()
