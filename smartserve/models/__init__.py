@@ -136,7 +136,9 @@ class Restaurant(CustomBaseModel):
 class Table(CustomBaseModel):
     number = models.PositiveIntegerField(
         _("Number"),
-        validators=[MinValueValidator(1)]
+        validators=[MinValueValidator(1)],
+        null=False,
+        blank=False
     )
     restaurant = models.ForeignKey(
         Restaurant,
@@ -262,6 +264,7 @@ class Seat(CustomBaseModel):
     )
     location_index = models.PositiveIntegerField(
         _("Location Index"),
+        validators=[MinValueValidator(0)],
         null=False,
         blank=False
     )

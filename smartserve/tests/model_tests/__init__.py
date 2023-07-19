@@ -75,10 +75,12 @@ class UserModelTests(TestCase):
 
     def test_date_joined_is_now(self) -> None:
         now: datetime = timezone.now()
+
         self.assertTrue((TestUserFactory.create().date_joined - now) < timedelta(seconds=1))
 
     def test_str(self) -> None:
         user: User = TestUserFactory.create()
+
         self.assertIn(user.employee_id, str(user))
         self.assertIn(user.full_name, str(user))
 
@@ -171,6 +173,7 @@ class RestaurantModelTests(TestCase):
 
     def test_str(self) -> None:
         restaurant: Restaurant = TestRestaurantFactory.create()
+
         self.assertIn(restaurant.name, str(restaurant))
 
 
@@ -182,6 +185,31 @@ class TableModelTests(TestCase):
     def test_number_validate_min_value(self) -> None:
         with self.assertRaisesMessage(ValidationError, "greater than or equal to 1"):
             TestTableFactory.create(number=0)
+
+    def test_number_unique_per_restaurant(self) -> None:
+        table: Table = TestTableFactory.create()
+
+        with self.assertRaisesMessage(ValidationError, "this Number and Restaurant already exists"):
+            TestTableFactory.create(
+                number=table.number,
+                restaurant=table.restaurant
+            )
+
+        try:
+            TestTableFactory.create(
+                number=table.number,
+                restaurant=TestRestaurantFactory.create()
+            )
+        except ValidationError as validate_error:
+            self.fail(f"ValidationError raised: {validate_error}")
+
+        try:
+            TestTableFactory.create(
+                number=TestTableFactory.create_field_value("number"),
+                restaurant=table.restaurant
+            )
+        except ValidationError as validate_error:
+            self.fail(f"ValidationError raised: {validate_error}")
 
     def test_restaurant_validate_required(self) -> None:
         with self.assertRaisesMessage(ValidationError, "field cannot be null"):
@@ -336,3 +364,48 @@ class TableModelTests(TestCase):
             table.seats.all(),
             ordered=False
         )
+
+
+class SeatModelTests(TestCase):
+    def test_table_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestSeatFactory.create(table=None)
+
+    def test_location_index_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestSeatFactory.create(location_index=None)
+
+    def test_location_index_validate_min_value(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "greater than or equal to 0"):
+            TestSeatFactory.create(location_index=-1)
+
+    def test_location_index_unique_per_table(self) -> None:
+        seat: Seat = TestSeatFactory.create()
+
+        with self.assertRaisesMessage(ValidationError, "this Table and Location Index already exists"):
+            TestSeatFactory.create(
+                location_index=seat.location_index,
+                table=seat.table
+            )
+
+        try:
+            TestSeatFactory.create(
+                location_index=seat.location_index,
+                table=TestTableFactory.create(restaurant=seat.table.restaurant)
+            )
+        except ValidationError as validate_error:
+            self.fail(f"ValidationError raised: {validate_error}")
+
+        try:
+            TestSeatFactory.create(
+                location_index=TestSeatFactory.create_field_value("location_index"),
+                table=seat.table
+            )
+        except ValidationError as validate_error:
+            self.fail(f"ValidationError raised: {validate_error}")
+
+    def test_str(self) -> None:
+        seat: Seat = TestSeatFactory.create()
+
+        self.assertIn(str(seat.location_index), str(seat))
+        self.assertIn(str(seat.table.number), str(seat))
