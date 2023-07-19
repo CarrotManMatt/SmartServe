@@ -139,7 +139,7 @@ class TestCase(DjangoTestCase):
     def setUp(self) -> None:
         Factory: type[BaseTestDataFactory]
         for Factory in (TestUserFactory, TestRestaurantFactory, TestTableFactory, TestSeatFactory, TestBookingFactory, TestSeatBookingFactory):
-            Factory.test_data_iterators = copy.deepcopy(Factory.ORIGINAL_TEST_DATA_ITERATORS)
+            Factory.set_up()
 
     def subTest(self, msg: str | None = None, **params) -> AbstractContextManager[None]:
         self.setUp()
@@ -158,13 +158,16 @@ class BaseTestDataFactory(abc.ABC):
     test_data_iterators: dict[str, Iterator[Any]]
 
     @classmethod
-    def create(cls, *, save: bool = True, **kwargs):
+    def create(cls, *, save: bool = True, **kwargs: Any) -> "MODEL":  # type: ignore
         """
             Helper function that creates & returns a test object instance with
             additional options for its attributes provided in kwargs. The save
             argument declares whether the object instance should be saved to
             the database or not.
         """
+
+        if not hasattr(cls, "test_data_iterators"):
+            raise RuntimeError("Cannot create an object instance because the test data has not been loaded into this factory. Call the \"set_up()\" class-method to load the test data.")
 
         previous_test_data_iterators: dict[str, Iterator[Any]] = copy.deepcopy(cls.test_data_iterators)
 
@@ -176,7 +179,7 @@ class BaseTestDataFactory(abc.ABC):
                 if cls.MODEL == auth.get_user_model():
                     return auth.get_user_model().objects.create_user(**kwargs)
                 else:
-                    return cls.MODEL.objects.create(**kwargs)  # type: ignore
+                    return cls.MODEL.objects.create(**kwargs)
             else:
                 # noinspection PyCallingNonCallable
                 return cls.MODEL(**kwargs)
@@ -196,6 +199,10 @@ class BaseTestDataFactory(abc.ABC):
             return next(cls.test_data_iterators[field_name])
         except StopIteration as test_data_iterator_error:
             raise NotEnoughTestDataError(field_name=field_name) from test_data_iterator_error
+
+    @classmethod
+    def set_up(cls) -> None:
+        cls.test_data_iterators = copy.deepcopy(cls.ORIGINAL_TEST_DATA_ITERATORS)
 
 
 class TestUserFactory(BaseTestDataFactory):
@@ -221,7 +228,7 @@ class TestRestaurantFactory(BaseTestDataFactory):
     MODEL: type[Model] = Restaurant
     # noinspection PyProtectedMember
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {
-        "name": iter(get_field_test_data(MODEL._meta.model_name, "name"))
+        "name": iter(get_field_test_data(MODEL._meta.model_name or "restaurant", "name"))
     }
 
 
@@ -235,7 +242,7 @@ class TestTableFactory(BaseTestDataFactory):
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {"number": itertools.count(1)}
 
     @classmethod
-    def create(cls, *, save=True, **kwargs):
+    def create(cls, *, save=True, **kwargs) -> Table:
         restaurant_kwargs: dict[str, Any] = {}
         for restaurant_field_name in copy.copy(kwargs).keys():
             if restaurant_field_name.startswith("restaurant__"):
@@ -277,7 +284,7 @@ class TestSeatFactory(BaseTestDataFactory):
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {"location_index": itertools.count(1)}
 
     @classmethod
-    def create(cls, *, save=True, **kwargs: Any):
+    def create(cls, *, save=True, **kwargs: Any) -> Seat:
         table_kwargs: dict[str, Any] = {}
         for table_field_name in copy.copy(kwargs).keys():
             if table_field_name.startswith("table__"):
@@ -302,7 +309,7 @@ class TestBookingFactory(BaseTestDataFactory):
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {}
 
     @classmethod
-    def create(cls, *, save=True, **kwargs: Any):
+    def create(cls, *, save=True, **kwargs: Any) -> Booking:
         start_end_pair: tuple[datetime, datetime] = cls.create_field_value("start_end_pair")
 
         kwargs.setdefault("start", start_end_pair[0])
@@ -338,7 +345,7 @@ class TestSeatBookingFactory(BaseTestDataFactory):
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {}
 
     @classmethod
-    def create(cls, *, save=True, **kwargs):
+    def create(cls, *, save=True, **kwargs) -> SeatBooking:
         seat_kwargs: dict[str, Any] = {}
         for seat_field_name in copy.copy(kwargs).keys():
             if seat_field_name.startswith("seat__"):

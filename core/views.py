@@ -44,7 +44,7 @@ class AdminDocsRedirectView(RedirectView):
         return url
 
 
-class LoginView(KnoxLoginView):  # type: ignore
+class LoginView(KnoxLoginView):
     """
         Customised login view to accept all users.
 

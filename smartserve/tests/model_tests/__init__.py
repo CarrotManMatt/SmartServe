@@ -169,7 +169,7 @@ class RestaurantModelTests(TestCase):
         with self.assertRaisesMessage(ValidationError, "field cannot be blank"):
             TestRestaurantFactory.create(name="")
 
-    def test_str(self):
+    def test_str(self) -> None:
         restaurant: Restaurant = TestRestaurantFactory.create()
         self.assertIn(restaurant.name, str(restaurant))
 
@@ -261,7 +261,11 @@ class TableModelTests(TestCase):
             ordered=False
         )
 
-    def test_bookings(self) -> None:
+    def test_seats_without_pk(self) -> None:
+        with self.assertRaisesMessage(ValueError, "'Table' instance needs to have a primary key"):
+            TestTableFactory.create(save=False).seats.all()
+
+    def test_bookings_with_pk(self) -> None:
         table: Table = TestTableFactory.create()
 
         booking_pks: set[int] = {
@@ -278,6 +282,10 @@ class TableModelTests(TestCase):
             table.bookings.all(),
             ordered=False
         )
+
+    def test_bookings_without_pk(self) -> None:
+        with self.assertRaisesMessage(ValueError, "'Table' instance needs to have a primary key"):
+            TestTableFactory.create(save=False).bookings.all()
 
     def test_str(self) -> None:
         table: Table = TestTableFactory.create()
