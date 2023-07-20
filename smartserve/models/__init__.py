@@ -113,7 +113,7 @@ class Restaurant(CustomBaseModel):
     name = models.CharField(
         _("Name"),
         max_length=100,
-        validators=[RegexValidator(r"^(?![\s'])(?!.*[\s']{2})[A-Za-z ']+(?<![\s'])\Z"), MinLengthValidator(2)]
+        validators=[RegexValidator(r"^(?![\s'-])(?!.*[\s'-]{2})[A-Za-z '-]+(?<![\s'-])\Z"), MinLengthValidator(2)]
     )
     employees = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
@@ -328,6 +328,17 @@ class Booking(CustomBaseModel):
 
         self.tables: TableManager = TableManager(self.seat_bookings)
 
+        class OrderManager(Manager):
+            def __init__(self, seat_bookings: Manager[SeatBooking]):
+                self.seat_bookings: Manager[SeatBooking] = seat_bookings
+
+                super().__init__()
+
+            def get_queryset(self) -> QuerySet[Order]:  # type: ignore
+                return Order.objects.filter(seat_booking__in=self.seat_bookings.values_list(flat=True))
+
+        self.orders: OrderManager = OrderManager(self.seat_bookings)
+
     def __str__(self) -> str:
         return f"Booking {self.id}"
 
@@ -354,6 +365,15 @@ class SeatBooking(CustomBaseModel):
         blank=False,
         null=False
     )
+    ordered_menu_items = models.ManyToManyField(
+        "MenuItem",
+        related_name="+",
+        verbose_name=_("Ordered Menu Items"),
+        help_text=_("The set of menu items ordered by this seat booking."),
+        blank=True,
+        through="Order",
+        through_fields=("seat_booking", "menu_item")
+    )
 
     class Meta:
         verbose_name = _("Seat Booking")
@@ -370,3 +390,73 @@ class SeatBooking(CustomBaseModel):
 
         if self.booking_id and self.seat_id and SeatBooking.objects.exclude(booking=self.booking).filter(seat__table=self.seat.table).exclude(booking__start__gte=self.booking.end).exclude(booking__end__lte=self.booking.start).exists():
             raise ValidationError({"seat": "A booking for this seat's table already exists within these start & end points."}, code="unique")
+
+
+class MenuItem(CustomBaseModel):
+    name = models.CharField(
+        _("Name"),
+        max_length=100,
+        validators=[RegexValidator(r"^(?![\s'-])(?!.*[\s'-]{2})[A-Za-z '-]+(?<![\s'-])\Z"), MinLengthValidator(2)],
+        unique=True
+    )
+    description = models.TextField(
+        _("Description"),
+        max_length=200,
+        error_messages={"null": "Description field cannot be null, use an empty string instead."},
+        null=False,
+        blank=True,
+        help_text="Longer textfield containing a description of this menu item."
+    )
+
+    class Meta:
+        verbose_name = _("Menu Item")
+
+    def __str__(self) -> str:
+        return self.name
+
+    def get_absolute_url(self) -> str:  # TODO
+        raise NotImplementedError
+
+
+class Order(CustomBaseModel):
+    class Courses(models.IntegerChoices):
+        """ Enum of course number & display values of each course. """
+
+        APPETISER = 0, "Appetiser"
+        STARTER = 1, "Starter"
+        MAIN_COURSE = 2, "Main Course"
+        DESSERT = 3, "Dessert"
+
+    menu_item = models.ForeignKey(
+        MenuItem,
+        on_delete=models.PROTECT,
+        related_name="orders"
+    )
+    seat_booking = models.ForeignKey(
+        SeatBooking,
+        on_delete=models.CASCADE,
+        related_name="orders"
+    )
+    course = models.PositiveIntegerField(
+        _("Course"),
+        null=False,
+        blank=False,
+        choices=Courses.choices
+    )
+    notes = models.TextField(
+        _("Notes"),
+        max_length=200,
+        error_messages={"null": "Notes field cannot be null, use an empty string instead."},
+        null=False,
+        blank=True,
+        help_text="Longer textfield containing any notes to the kitchen about how to prepare this order."
+    )
+
+    class Meta:
+        verbose_name = _("Ordered Menu Item")
+
+    def __str__(self) -> str:
+        return f"{self.menu_item} for {self.seat_booking.seat}"
+
+    def get_absolute_url(self) -> str:  # TODO
+        raise NotImplementedError

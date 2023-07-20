@@ -16,7 +16,7 @@ from django.test import TestCase as DjangoTestCase
 from django.utils import timezone
 
 from smartserve.exceptions import NotEnoughTestDataError
-from smartserve.models import Booking, Restaurant, Seat, SeatBooking, Table, User
+from smartserve.models import Booking, MenuItem, Restaurant, Seat, SeatBooking, Table, User
 
 UNICODE_IDS: Iterable[int] = itertools.chain(
     range(32, 128),
@@ -138,7 +138,7 @@ def get_field_test_data(model_name: str, field_name: str) -> Iterable[str]:
 class TestCase(DjangoTestCase):
     def setUp(self) -> None:
         Factory: type[BaseTestDataFactory]
-        for Factory in (TestUserFactory, TestRestaurantFactory, TestTableFactory, TestSeatFactory, TestBookingFactory, TestSeatBookingFactory):
+        for Factory in (TestUserFactory, TestRestaurantFactory, TestTableFactory, TestSeatFactory, TestBookingFactory, TestSeatBookingFactory, TestMenuItemFactory):
             Factory.set_up()
 
     def subTest(self, msg: str | None = None, **params: Any) -> AbstractContextManager[None]:
@@ -172,7 +172,8 @@ class BaseTestDataFactory(abc.ABC):
         previous_test_data_iterators: dict[str, Iterator[Any]] = copy.deepcopy(cls.test_data_iterators)
 
         for field_name in cls.test_data_iterators.keys():
-            kwargs.setdefault(field_name, cls.create_field_value(field_name))
+            if field_name not in kwargs:
+                kwargs.setdefault(field_name, cls.create_field_value(field_name))
 
         try:
             if save:
@@ -195,6 +196,9 @@ class BaseTestDataFactory(abc.ABC):
             name.
         """
 
+        if not hasattr(cls, "test_data_iterators"):
+            raise RuntimeError("Cannot create a value for the given field because the test data has not been loaded into this factory. Call the \"set_up()\" class-method to load the test data.")
+
         try:
             return next(cls.test_data_iterators[field_name])
         except StopIteration as test_data_iterator_error:
@@ -212,11 +216,13 @@ class TestUserFactory(BaseTestDataFactory):
     """
 
     MODEL: type[Model] = User
-    # noinspection PyProtectedMember
-    ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {
-        "first_name": iter(get_field_test_data(MODEL._meta.model_name or "user", "first_name")),
-        "last_name": iter(get_field_test_data(MODEL._meta.model_name or "user", "last_name"))
-    }
+
+    @staticmethod
+    def _get_original_test_data_iterators(model: type[Model]) -> dict[str, Iterator[Any]]:
+        # noinspection PyProtectedMember
+        return {field_name: iter(get_field_test_data(model._meta.model_name or "user", field_name)) for field_name in {"first_name", "last_name"}}
+
+    ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = _get_original_test_data_iterators(MODEL)
 
     @classmethod
     def create(cls, *, save: bool = True, **kwargs: Any) -> User:
@@ -376,5 +382,28 @@ class TestSeatBookingFactory(BaseTestDataFactory):
 
         if "booking" not in kwargs:
             kwargs.setdefault("booking", TestBookingFactory.create(**booking_kwargs))
+
+        return super().create(save=save, **kwargs)
+
+
+class TestMenuItemFactory(BaseTestDataFactory):
+    # noinspection SpellCheckingInspection
+    """
+        Helper class to provide functions that create test data for
+        :model:`smartserve.menuitem` object instances.
+    """
+
+    MODEL: type[Model] = MenuItem
+
+    @staticmethod
+    def _get_original_test_data_iterators(model: type[Model]) -> dict[str, Iterator[Any]]:
+        # noinspection PyProtectedMember
+        return {field_name: iter(get_field_test_data(model._meta.model_name or "menuitem", field_name)) for field_name in {"name", "description"}}
+
+    ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = _get_original_test_data_iterators(MODEL)
+
+    @classmethod
+    def create(cls, *, save: bool = True, **kwargs: Any) -> MenuItem:
+        kwargs.setdefault("description", "")
 
         return super().create(save=save, **kwargs)

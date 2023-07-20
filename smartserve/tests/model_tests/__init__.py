@@ -3,12 +3,13 @@ from datetime import datetime, timedelta
 from typing import Any, Iterable
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.db.models import Manager
 from django.utils import timezone
 
-from smartserve.models import Booking, Restaurant, Seat, SeatBooking, Table, User
+from smartserve.models import Booking, MenuItem, Restaurant, Seat, SeatBooking, Table, User
 from smartserve.tests import utils
-from smartserve.tests.utils import TestBookingFactory, TestCase, TestRestaurantFactory, TestSeatBookingFactory, TestSeatFactory, TestTableFactory, TestUserFactory
+from smartserve.tests.utils import TestBookingFactory, TestCase, TestMenuItemFactory, TestRestaurantFactory, TestSeatBookingFactory, TestSeatFactory, TestTableFactory, TestUserFactory
 
 
 class UserModelTests(TestCase):
@@ -137,6 +138,14 @@ class RestaurantModelTests(TestCase):
             with self.subTest("Invalid unicode name provided", invalid_name=invalid_name):
                 with self.assertRaisesMessage(ValidationError, "Enter a valid value"):
                     TestRestaurantFactory.create(name=invalid_name)
+
+        valid_name: str
+        for valid_name in {"The Duke's Head", "The Bad-Tempered Jester"}:
+            with self.subTest("Valid unicode name provided", valid_name=valid_name):
+                try:
+                    TestRestaurantFactory.create(name=valid_name)
+                except ValidationError as validate_error:
+                    self.fail(f"ValidationError raised: {validate_error}")
 
     def test_name_validate_min_length(self) -> None:
         with self.assertRaisesMessage(ValidationError, "least 2 characters (it has 1"):
@@ -564,3 +573,80 @@ class SeatBookingModelTests(TestCase):
                 booking__start=seat_booking.booking.start + timedelta(seconds=15),
                 booking__end=seat_booking.booking.end - timedelta(seconds=15)
             )
+
+
+class MenuItemModelTests(TestCase):
+    def test_name_validate_regex(self) -> None:
+        partial_invalid_name: str = TestMenuItemFactory.create_field_value("name")
+        invalid_names: set[str] = {f" {partial_invalid_name}", f"{partial_invalid_name} ", f" {partial_invalid_name} "}
+
+        unicode_id: int
+        for unicode_id in utils.UNICODE_IDS:
+            if chr(unicode_id).isalpha():
+                continue
+
+            invalid_names.add(chr(unicode_id) * 6)
+
+        invalid_name: str
+        for invalid_name in invalid_names:
+            with self.subTest("Invalid unicode name provided", invalid_name=invalid_name):
+                with self.assertRaisesMessage(ValidationError, "Enter a valid value"):
+                    TestMenuItemFactory.create(name=invalid_name)
+
+        valid_name: str
+        for valid_name in {"Daisy's Pie", "Slow-Cooked Beef"}:
+            with self.subTest("Valid unicode name provided", valid_name=valid_name):
+                try:
+                    TestMenuItemFactory.create(name=valid_name)
+                except ValidationError as validate_error:
+                    self.fail(f"ValidationError raised: {validate_error}")
+
+    def test_name_validate_min_length(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "least 2 characters (it has 1"):
+            TestMenuItemFactory.create(name=TestMenuItemFactory.create_field_value("name")[:1])
+
+    def test_name_validate_correct_length(self) -> None:
+        valid_name_length: int
+        for valid_name_length in range(2, 101):
+            with self.subTest("Valid length name provided", valid_name_length=valid_name_length):
+                try:
+                    TestMenuItemFactory.create(
+                        name=utils.duplicate_string_to_size(
+                            TestMenuItemFactory.create_field_value("name"), size=valid_name_length, strip=True
+                        )
+                    )
+                except ValidationError as validate_error:
+                    self.fail(f"ValidationError raised: {validate_error}")
+
+    def test_name_validate_max_length(self) -> None:
+        invalid_name_length: int
+        for invalid_name_length in range(101, 105):
+            with self.subTest("Too long name provided", invalid_name_length=invalid_name_length):
+                with self.assertRaisesMessage(ValidationError, f"most 100 characters (it has {invalid_name_length}"):
+                    TestMenuItemFactory.create(
+                        name=utils.duplicate_string_to_size(
+                            TestMenuItemFactory.create_field_value("name"), size=invalid_name_length, strip=True
+                        )
+                    )
+
+    def test_name_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestMenuItemFactory.create(name=None)
+
+        with self.assertRaisesMessage(ValidationError, "field cannot be blank"):
+            TestMenuItemFactory.create(name="")
+
+    def test_name_validate_unique(self) -> None:
+        menu_item_name: str = TestMenuItemFactory.create().name
+
+        with self.assertRaisesMessage(ValidationError, "Name already exists"):
+            TestMenuItemFactory.create(name=menu_item_name)
+
+    def test_description_validate_not_null(self) -> None:
+        with self.assertRaisesMessage(IntegrityError, "NOT NULL constraint failed"):
+            TestMenuItemFactory.create(description=None)
+
+    def test_str(self) -> None:
+        menu_item: MenuItem = TestMenuItemFactory.create()
+
+        self.assertEqual(menu_item.name, str(menu_item))
