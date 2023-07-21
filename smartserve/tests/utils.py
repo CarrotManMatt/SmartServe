@@ -16,7 +16,7 @@ from django.test import TestCase as DjangoTestCase
 from django.utils import timezone
 
 from smartserve.exceptions import NotEnoughTestDataError
-from smartserve.models import Booking, MenuItem, Restaurant, Seat, SeatBooking, Table, User
+from smartserve.models import Booking, MenuItem, Order, Restaurant, Seat, SeatBooking, Table, User
 
 UNICODE_IDS: Iterable[int] = itertools.chain(
     range(32, 128),
@@ -405,5 +405,47 @@ class TestMenuItemFactory(BaseTestDataFactory):
     @classmethod
     def create(cls, *, save: bool = True, **kwargs: Any) -> MenuItem:
         kwargs.setdefault("description", "")
+
+        return super().create(save=save, **kwargs)
+
+
+class TestOrderFactory(BaseTestDataFactory):
+    # noinspection SpellCheckingInspection
+    """
+        Helper class to provide functions that create test data for
+        :model:`smartserve.order` object instances.
+    """
+
+    MODEL: type[Model] = Order
+    # noinspection PyProtectedMember
+    ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {
+        "course": itertools.cycle(Order.Courses.values), "notes": iter(get_field_test_data(MODEL._meta.model_name or "order", "notes"))
+    }
+
+    @classmethod
+    def create(cls, *, save: bool = True, **kwargs: Any) -> Order:
+        kwargs.setdefault("notes", "")
+
+        menu_item_kwargs: dict[str, Any] = {}
+        for menu_item_field_name in copy.copy(kwargs).keys():
+            if menu_item_field_name.startswith("menu_item__"):
+                menu_item_kwargs[menu_item_field_name.removeprefix("menu_item__")] = kwargs.pop(menu_item_field_name)
+
+        if "menu_item" in kwargs and menu_item_kwargs:
+            raise ValueError("Invalid arguments supplied: choose one of \"menu_item\" instance or \"menu_item__\" attributes.")
+
+        if "menu_item" not in kwargs:
+            kwargs.setdefault("menu_item", TestMenuItemFactory.create(**menu_item_kwargs))
+
+        seat_booking_kwargs: dict[str, Any] = {}
+        for seat_booking_field_name in copy.copy(kwargs).keys():
+            if seat_booking_field_name.startswith("seat_booking_field_name__"):
+                seat_booking_kwargs[seat_booking_field_name.removeprefix("seat_booking_field_name__")] = kwargs.pop(seat_booking_field_name)
+
+        if "seat_booking" in kwargs and seat_booking_kwargs:
+            raise ValueError("Invalid arguments supplied: choose one of \"seat_booking\" instance or \"seat_booking_field_name__\" attributes.")
+
+        if "seat_booking" not in kwargs:
+            kwargs.setdefault("seat_booking", TestSeatBookingFactory.create(**seat_booking_kwargs))
 
         return super().create(save=save, **kwargs)

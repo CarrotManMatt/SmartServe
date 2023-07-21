@@ -7,9 +7,9 @@ from django.db import IntegrityError
 from django.db.models import Manager
 from django.utils import timezone
 
-from smartserve.models import Booking, MenuItem, Restaurant, Seat, SeatBooking, Table, User
+from smartserve.models import Booking, MenuItem, Order, Restaurant, Seat, SeatBooking, Table, User
 from smartserve.tests import utils
-from smartserve.tests.utils import TestBookingFactory, TestCase, TestMenuItemFactory, TestRestaurantFactory, TestSeatBookingFactory, TestSeatFactory, TestTableFactory, TestUserFactory
+from smartserve.tests.utils import TestBookingFactory, TestCase, TestMenuItemFactory, TestOrderFactory, TestRestaurantFactory, TestSeatBookingFactory, TestSeatFactory, TestTableFactory, TestUserFactory
 
 
 class UserModelTests(TestCase):
@@ -124,7 +124,11 @@ class UserModelTests(TestCase):
 class RestaurantModelTests(TestCase):
     def test_name_validate_regex(self) -> None:
         partial_invalid_name: str = TestRestaurantFactory.create_field_value("name")
-        invalid_names: set[str] = {f" {partial_invalid_name}", f"{partial_invalid_name} ", f" {partial_invalid_name} "}
+        invalid_names: set[str] = {
+            f" {partial_invalid_name}",
+            f"{partial_invalid_name} ",
+            f" {partial_invalid_name} "
+        }
 
         unicode_id: int
         for unicode_id in utils.UNICODE_IDS:
@@ -149,7 +153,9 @@ class RestaurantModelTests(TestCase):
 
     def test_name_validate_min_length(self) -> None:
         with self.assertRaisesMessage(ValidationError, "least 2 characters (it has 1"):
-            TestRestaurantFactory.create(name=TestRestaurantFactory.create_field_value("name")[:1])
+            TestRestaurantFactory.create(
+                name=TestRestaurantFactory.create_field_value("name")[:1]
+            )
 
     def test_name_validate_correct_length(self) -> None:
         valid_name_length: int
@@ -158,7 +164,9 @@ class RestaurantModelTests(TestCase):
                 try:
                     TestRestaurantFactory.create(
                         name=utils.duplicate_string_to_size(
-                            TestRestaurantFactory.create_field_value("name"), size=valid_name_length, strip=True
+                            TestRestaurantFactory.create_field_value("name"),
+                            size=valid_name_length,
+                            strip=True
                         )
                     )
                 except ValidationError as validate_error:
@@ -171,7 +179,9 @@ class RestaurantModelTests(TestCase):
                 with self.assertRaisesMessage(ValidationError, f"most 100 characters (it has {invalid_name_length}"):
                     TestRestaurantFactory.create(
                         name=utils.duplicate_string_to_size(
-                            TestRestaurantFactory.create_field_value("name"), size=invalid_name_length, strip=True
+                            TestRestaurantFactory.create_field_value("name"),
+                            size=invalid_name_length,
+                            strip=True
                         )
                     )
 
@@ -181,6 +191,15 @@ class RestaurantModelTests(TestCase):
 
         with self.assertRaisesMessage(ValidationError, "field cannot be blank"):
             TestRestaurantFactory.create(name="")
+
+    def test_employees_unique(self) -> None:
+        restaurant: Restaurant = TestRestaurantFactory.create()
+        user: User = TestUserFactory.create()
+
+        restaurant.employees.add(user)
+        restaurant.employees.add(user)
+
+        self.assertEqual(1, restaurant.employees.count())
 
     def test_str(self) -> None:
         restaurant: Restaurant = TestRestaurantFactory.create()
@@ -530,6 +549,26 @@ class SeatBookingModelTests(TestCase):
         with self.assertRaisesMessage(ValidationError, "field cannot be null"):
             TestSeatBookingFactory.create(booking=None)
 
+    def test_ordered_menu_items_multiple_of_menu_item(self) -> None:
+        menu_item: MenuItem = TestMenuItemFactory.create()
+        seat_booking: SeatBooking = TestSeatBookingFactory.create()
+
+        course: int = TestOrderFactory.create(
+            seat_booking=seat_booking,
+            menu_item=menu_item
+        ).course
+        TestOrderFactory.create(
+            seat_booking=seat_booking,
+            menu_item=menu_item,
+            course=course
+        )
+        seat_booking.ordered_menu_items.add(  # type: ignore
+            menu_item,
+            through_defaults={"course": course}
+        )
+
+        self.assertEqual(2, seat_booking.orders.filter(course=course).count())
+
     def test_seat_unique_per_booking(self) -> None:
         seat_booking: SeatBooking = TestSeatBookingFactory.create()
 
@@ -578,7 +617,11 @@ class SeatBookingModelTests(TestCase):
 class MenuItemModelTests(TestCase):
     def test_name_validate_regex(self) -> None:
         partial_invalid_name: str = TestMenuItemFactory.create_field_value("name")
-        invalid_names: set[str] = {f" {partial_invalid_name}", f"{partial_invalid_name} ", f" {partial_invalid_name} "}
+        invalid_names: set[str] = {
+            f" {partial_invalid_name}",
+            f"{partial_invalid_name} ",
+            f" {partial_invalid_name} "
+        }
 
         unicode_id: int
         for unicode_id in utils.UNICODE_IDS:
@@ -603,7 +646,9 @@ class MenuItemModelTests(TestCase):
 
     def test_name_validate_min_length(self) -> None:
         with self.assertRaisesMessage(ValidationError, "least 2 characters (it has 1"):
-            TestMenuItemFactory.create(name=TestMenuItemFactory.create_field_value("name")[:1])
+            TestMenuItemFactory.create(
+                name=TestMenuItemFactory.create_field_value("name")[:1]
+            )
 
     def test_name_validate_correct_length(self) -> None:
         valid_name_length: int
@@ -612,7 +657,9 @@ class MenuItemModelTests(TestCase):
                 try:
                     TestMenuItemFactory.create(
                         name=utils.duplicate_string_to_size(
-                            TestMenuItemFactory.create_field_value("name"), size=valid_name_length, strip=True
+                            TestMenuItemFactory.create_field_value("name"),
+                            size=valid_name_length,
+                            strip=True
                         )
                     )
                 except ValidationError as validate_error:
@@ -625,7 +672,9 @@ class MenuItemModelTests(TestCase):
                 with self.assertRaisesMessage(ValidationError, f"most 100 characters (it has {invalid_name_length}"):
                     TestMenuItemFactory.create(
                         name=utils.duplicate_string_to_size(
-                            TestMenuItemFactory.create_field_value("name"), size=invalid_name_length, strip=True
+                            TestMenuItemFactory.create_field_value("name"),
+                            size=invalid_name_length,
+                            strip=True
                         )
                     )
 
@@ -650,3 +699,34 @@ class MenuItemModelTests(TestCase):
         menu_item: MenuItem = TestMenuItemFactory.create()
 
         self.assertEqual(menu_item.name, str(menu_item))
+
+
+class OrderModelTests(TestCase):
+    def test_menu_item_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestOrderFactory.create(menu_item=None)
+
+    def test_seat_booking_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestOrderFactory.create(seat_booking=None)
+
+    def test_course_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestOrderFactory.create(course=None)
+
+    def test_course_validate_one_of_choices(self) -> None:
+        invalid_course: int
+        for invalid_course in set(range(-15, 0)) | set(range(4, 25)):
+            with self.subTest("Invalid course provided", invalid_course=invalid_course):
+                with self.assertRaisesMessage(ValidationError, "not a valid choice"):
+                    TestOrderFactory.create(course=invalid_course)
+
+    def test_notes_validate_not_null(self) -> None:
+        with self.assertRaisesMessage(IntegrityError, "NOT NULL constraint failed"):
+            TestOrderFactory.create(notes=None)
+
+    def test_str(self) -> None:
+        order: Order = TestOrderFactory.create()
+
+        self.assertIn(str(order.menu_item), str(order))
+        self.assertIn(str(order.seat_booking.seat), str(order))

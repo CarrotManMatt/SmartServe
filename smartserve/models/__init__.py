@@ -422,10 +422,10 @@ class Order(CustomBaseModel):
     class Courses(models.IntegerChoices):
         """ Enum of course number & display values of each course. """
 
-        APPETISER = 0, "Appetiser"
-        STARTER = 1, "Starter"
-        MAIN_COURSE = 2, "Main Course"
-        DESSERT = 3, "Dessert"
+        APPETISER = 0, _("Appetiser")
+        STARTER = 1, _("Starter")
+        MAIN_COURSE = 2, _("Main Course")
+        DESSERT = 3, _("Dessert")
 
     menu_item = models.ForeignKey(
         MenuItem,
