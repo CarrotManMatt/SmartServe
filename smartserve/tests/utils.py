@@ -1,16 +1,20 @@
 import abc
 import copy
+import functools
 import itertools
 import json
 import random
-from contextlib import AbstractContextManager
+# noinspection PyProtectedMember,PyUnresolvedReferences
+from contextlib import AbstractContextManager, _GeneratorContextManager
 from datetime import datetime
-from typing import Any, Iterable, Iterator
+from functools import wraps
+from types import TracebackType
+from typing import Any, Callable, Iterable, Iterator
 
 from django.conf import settings
 from django.contrib import auth
 from django.core.exceptions import ImproperlyConfigured, ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Model
 from django.test import TestCase as DjangoTestCase
 from django.utils import timezone
@@ -114,6 +118,9 @@ def duplicate_string_to_size(string: str, size: int, strip: bool = False) -> str
         if stripped_shortened_string != shortened_string:
             shortened_string = duplicate_string_to_size(stripped_shortened_string, size)
 
+        if shortened_string.endswith((" ", "'", "-")):
+            shortened_string = shortened_string[:-1] + shortened_string[0]
+
     return shortened_string
 
 
@@ -133,18 +140,6 @@ def get_field_test_data(model_name: str, field_name: str) -> Iterable[str]:
         raise ImproperlyConfigured(f"TEST_DATA_JSON_FILE_PATH cannot be empty when running tests.")
 
     return set(TEST_DATA[model_name][field_name])
-
-
-class TestCase(DjangoTestCase):
-    def setUp(self) -> None:
-        Factory: type[BaseTestDataFactory]
-        for Factory in (TestUserFactory, TestRestaurantFactory, TestTableFactory, TestSeatFactory, TestBookingFactory, TestSeatBookingFactory, TestMenuItemFactory):
-            Factory.set_up()
-
-    def subTest(self, msg: str | None = None, **params: Any) -> AbstractContextManager[None]:
-        self.setUp()
-
-        return super().subTest(msg, **params)
 
 
 class BaseTestDataFactory(abc.ABC):
@@ -449,3 +444,49 @@ class TestOrderFactory(BaseTestDataFactory):
             kwargs.setdefault("seat_booking", TestSeatBookingFactory.create(**seat_booking_kwargs))
 
         return super().create(save=save, **kwargs)
+
+
+class TestCase(DjangoTestCase):
+    TEST_DATA_FACTORIES: set[type[BaseTestDataFactory]] = {
+        TestUserFactory,
+        TestRestaurantFactory,
+        TestTableFactory,
+        TestSeatFactory,
+        TestBookingFactory,
+        TestSeatBookingFactory,
+        TestMenuItemFactory,
+        TestOrderFactory
+    }
+
+    def setUp(self) -> None:
+        self._set_up_test_data_factories(self.TEST_DATA_FACTORIES)
+
+    @staticmethod
+    def _set_up_test_data_factories(test_data_factories: set[type[BaseTestDataFactory]]) -> None:
+        TestDataFactory: type[BaseTestDataFactory]
+        for TestDataFactory in test_data_factories:
+            TestDataFactory.set_up()
+
+    @staticmethod
+    def _sub_test_wrapper(func: Callable, setup_function: Callable[[], None]) -> Callable[..., AbstractContextManager]:
+        class _SubTestContextManager(_GeneratorContextManager):
+            def __enter__(self) -> Any:
+                self._sid = transaction.savepoint()
+                setup_function()
+                return super().__enter__()
+
+            def __exit__(self, typ: type[BaseException] | None, value: BaseException | None, traceback: TracebackType | None) -> bool | None:
+                transaction.savepoint_rollback(self._sid)
+                return super().__exit__(typ, value, traceback)
+
+        # noinspection SpellCheckingInspection
+        @wraps(func)
+        def helper(*args: Any, **kwds: Any) -> _SubTestContextManager:
+            return _SubTestContextManager(func, args, kwds)
+
+        return helper
+
+    subTest: Callable[..., AbstractContextManager] = _sub_test_wrapper(
+        DjangoTestCase.subTest.__wrapped__,  # type: ignore
+        functools.partial(_set_up_test_data_factories, TEST_DATA_FACTORIES)
+    )
