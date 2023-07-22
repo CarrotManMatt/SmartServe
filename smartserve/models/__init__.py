@@ -264,9 +264,7 @@ class Seat(CustomBaseModel):
     )
     location_index = models.PositiveIntegerField(
         _("Location Index"),
-        validators=[MinValueValidator(0)],
-        null=False,
-        blank=False
+        validators=[MinValueValidator(0)]
     )
 
     class Meta:
@@ -385,7 +383,7 @@ class SeatBooking(CustomBaseModel):
         ]
 
     def clean(self) -> None:
-        if self.seat_id and self.booking_id and self.booking.restaurant and self.booking.seat_bookings.count() >= 2 and self.seat.table.restaurant != self.booking.restaurant:
+        if self.seat_id and self.booking_id and self.booking.restaurant and (self.booking.seat_bookings.count() + (1 if not self.pk else 0)) >= 2 and self.seat.table.restaurant != self.booking.restaurant:
             raise ValidationError("The tables within this Booking must all be at the same restaurant.", code="invalid")
 
         if self.booking_id and self.seat_id and SeatBooking.objects.exclude(booking=self.booking).filter(seat__table=self.seat.table).exclude(booking__start__gte=self.booking.end).exclude(booking__end__lte=self.booking.start).exists():

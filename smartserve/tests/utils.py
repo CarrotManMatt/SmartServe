@@ -421,6 +421,8 @@ class TestOrderFactory(BaseTestDataFactory):
     def create(cls, *, save: bool = True, **kwargs: Any) -> Order:
         kwargs.setdefault("notes", "")
 
+        created_menu_item: bool = "menu_item" not in kwargs
+
         menu_item_kwargs: dict[str, Any] = {}
         for menu_item_field_name in copy.copy(kwargs).keys():
             if menu_item_field_name.startswith("menu_item__"):
@@ -434,14 +436,28 @@ class TestOrderFactory(BaseTestDataFactory):
 
         seat_booking_kwargs: dict[str, Any] = {}
         for seat_booking_field_name in copy.copy(kwargs).keys():
-            if seat_booking_field_name.startswith("seat_booking_field_name__"):
-                seat_booking_kwargs[seat_booking_field_name.removeprefix("seat_booking_field_name__")] = kwargs.pop(seat_booking_field_name)
+            if seat_booking_field_name.startswith("seat_booking__"):
+                seat_booking_kwargs[seat_booking_field_name.removeprefix("seat_booking__")] = kwargs.pop(seat_booking_field_name)
 
         if "seat_booking" in kwargs and seat_booking_kwargs:
-            raise ValueError("Invalid arguments supplied: choose one of \"seat_booking\" instance or \"seat_booking_field_name__\" attributes.")
+            raise ValueError("Invalid arguments supplied: choose one of \"seat_booking\" instance or \"seat_booking__\" attributes.")
 
         if "seat_booking" not in kwargs:
-            kwargs.setdefault("seat_booking", TestSeatBookingFactory.create(**seat_booking_kwargs))
+            if kwargs["menu_item"] and kwargs["menu_item"].available_at_restaurants.exists() and "seat" not in seat_booking_kwargs and "seat__table" not in seat_booking_kwargs:
+                seat_booking_kwargs.setdefault(
+                    "seat__table__restaurant",
+                    kwargs["menu_item"].available_at_restaurants.first()
+                )
+
+            kwargs.setdefault(
+                "seat_booking",
+                TestSeatBookingFactory.create(**seat_booking_kwargs)
+            )
+
+        if kwargs["menu_item"] and kwargs["seat_booking"] and created_menu_item:
+            kwargs["menu_item"].available_at_restaurants.add(
+                kwargs["seat_booking"].seat.table.restaurant
+            )
 
         return super().create(save=save, **kwargs)
 

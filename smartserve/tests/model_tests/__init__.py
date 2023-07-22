@@ -552,6 +552,7 @@ class SeatBookingModelTests(TestCase):
     def test_ordered_menu_items_multiple_of_menu_item(self) -> None:
         menu_item: MenuItem = TestMenuItemFactory.create()
         seat_booking: SeatBooking = TestSeatBookingFactory.create()
+        menu_item.available_at_restaurants.add(seat_booking.seat.table.restaurant)
 
         course: int = TestOrderFactory.create(
             seat_booking=seat_booking,
@@ -730,3 +731,21 @@ class OrderModelTests(TestCase):
 
         self.assertIn(str(order.menu_item), str(order))
         self.assertIn(str(order.seat_booking.seat), str(order))
+
+    def test_menu_item_available_at_restaurant_of_booking(self) -> None:
+        menu_item: MenuItem = TestMenuItemFactory.create()
+        menu_item.available_at_restaurants.add(TestRestaurantFactory.create())
+
+        with self.assertRaisesMessage(ValidationError, "Only menu items at this booking's restaurant"):
+            TestOrderFactory.create(
+                menu_item=menu_item,
+                seat_booking__seat__table__restaurant=TestRestaurantFactory.create()
+            )
+
+        try:
+            TestOrderFactory.create(
+                menu_item=menu_item,
+                seat_booking__seat__table__restaurant=menu_item.available_at_restaurants.first()
+            )
+        except ValidationError as validate_error:
+            self.fail(f"ValidationError raised: {validate_error}")
