@@ -9,7 +9,7 @@ from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 from rangefilter.filters import NumericRangeFilter
 
-from smartserve.models import Restaurant, Table, User, Seat, Booking
+from smartserve.models import Restaurant, SeatBooking, Table, User, Seat, Booking
 
 
 class UserIsStaffListFilter(admin.SimpleListFilter):
@@ -232,5 +232,22 @@ class BookingRestaurantListFilter(BaseRestaurantListFilter):
         restaurant_pk: str | None = self.value()
         if restaurant_pk:
             return queryset.filter(seat_bookings__seat__table__restaurant=restaurant_pk)
+        else:
+            return queryset
+
+
+class SeatBookingRestaurantListFilter(BaseRestaurantListFilter):
+    # noinspection SpellCheckingInspection
+    """
+        Admin filter to limit the :model:`smartserve.seatbooking` objects shown
+        on the admin list view, by the seat's restaurant.
+    """
+
+    def queryset(self, request: HttpRequest, queryset: QuerySet[SeatBooking]) -> QuerySet[SeatBooking]:
+        """ Returns the filtered queryset according to the given url lookup. """
+
+        restaurant_pk: str | None = self.value()
+        if restaurant_pk:
+            return queryset.filter(seat__table__restaurant=restaurant_pk)
         else:
             return queryset

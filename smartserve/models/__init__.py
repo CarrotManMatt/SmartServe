@@ -119,7 +119,7 @@ class Restaurant(CustomBaseModel):
         settings.AUTH_USER_MODEL,
         related_name="restaurants",
         verbose_name=_("Employees"),
-        help_text=_("The set of employees at this restaurant. (Hold down “Control”, or “Command” on a Mac, to select more than one.)"),
+        help_text=_("The set of employees at this restaurant."),
         blank=True
     )
 
@@ -385,11 +385,14 @@ class SeatBooking(CustomBaseModel):
         ]
 
     def clean(self) -> None:
-        if self.booking_id and self.booking.restaurant and self.seat.table.restaurant != self.booking.restaurant:
+        if self.seat_id and self.booking_id and self.booking.restaurant and self.booking.seat_bookings.count() >= 2 and self.seat.table.restaurant != self.booking.restaurant:
             raise ValidationError("The tables within this Booking must all be at the same restaurant.", code="invalid")
 
         if self.booking_id and self.seat_id and SeatBooking.objects.exclude(booking=self.booking).filter(seat__table=self.seat.table).exclude(booking__start__gte=self.booking.end).exclude(booking__end__lte=self.booking.start).exists():
             raise ValidationError({"seat": "A booking for this seat's table already exists within these start & end points."}, code="unique")
+
+    def __str__(self) -> str:
+        return f"{self.seat} at {self.booking}"
 
 
 class MenuItem(CustomBaseModel):
@@ -406,6 +409,13 @@ class MenuItem(CustomBaseModel):
         null=False,
         blank=True,
         help_text="Longer textfield containing a description of this menu item."
+    )
+    available_at_restaurants = models.ManyToManyField(
+        Restaurant,
+        related_name="menu_items",
+        verbose_name=_("Available At Restaurants"),
+        help_text=_("The set of restaurants that this menu item is available at."),
+        blank=True
     )
 
     class Meta:
@@ -435,7 +445,7 @@ class Order(CustomBaseModel):
     seat_booking = models.ForeignKey(
         SeatBooking,
         on_delete=models.CASCADE,
-        related_name="orders"
+        related_name="orders",
     )
     course = models.PositiveIntegerField(
         _("Course"),
@@ -457,6 +467,10 @@ class Order(CustomBaseModel):
 
     def __str__(self) -> str:
         return f"{self.menu_item} for {self.seat_booking.seat}"
+
+    def clean(self) -> None:
+        if self.seat_booking_id and self.menu_item_id and self.seat_booking.seat.table.restaurant not in self.menu_item.available_at_restaurants.all():
+            raise ValidationError({"menu_item": "Only menu items at this booking's restaurant can be ordered."}, code="invalid")
 
     def get_absolute_url(self) -> str:  # TODO
         raise NotImplementedError

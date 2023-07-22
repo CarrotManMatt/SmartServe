@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 from knox.models import AuthToken
 
-from smartserve.models import Seat, SeatBooking, Table
+from smartserve.models import Order, Seat, SeatBooking, Table
 
 
 class UserAuthTokensInline(admin.StackedInline):
@@ -42,3 +42,9 @@ class BookingSeatBookingsInline(admin.StackedInline):
     model = SeatBooking
     verbose_name = _("Seat")
     autocomplete_fields = ("seat",)
+
+
+class SeatBookingOrdersInline(admin.TabularInline):
+    extra = 0
+    model = Order
+    autocomplete_fields = ("menu_item",)

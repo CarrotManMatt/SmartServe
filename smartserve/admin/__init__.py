@@ -2,6 +2,7 @@
     Admin configurations for models in smartserve app.
 """
 
+from datetime import datetime
 from typing import Any, Callable, Sequence
 
 from django.contrib import admin
@@ -14,10 +15,10 @@ from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 from rangefilter.filters import DateTimeRangeFilter, DateTimeRangeFilterBuilder
 
-from smartserve.models import Booking, Restaurant, Seat, Table, User
-from .filters import BookingRestaurantListFilter, RestaurantEmployeeCountListFilter, RestaurantTableCountListFilter, SeatRestaurantListFilter, TableIsSubTableFilter, TableRestaurantListFilter, UserGroupListFilter, UserIsActiveListFilter, UserIsStaffListFilter
-from .forms import UserChangeForm
-from .inlines import BookingSeatBookingsInline, RestaurantTablesInline, TableSeatsInline, UserAuthTokensInline
+from smartserve.models import Booking, MenuItem, Restaurant, Seat, SeatBooking, Table, User
+from .filters import BookingRestaurantListFilter, RestaurantEmployeeCountListFilter, RestaurantTableCountListFilter, SeatBookingRestaurantListFilter, SeatRestaurantListFilter, TableIsSubTableFilter, TableRestaurantListFilter, UserGroupListFilter, UserIsActiveListFilter, UserIsStaffListFilter
+from .forms import RestaurantModelForm, UserChangeForm
+from .inlines import BookingSeatBookingsInline, RestaurantTablesInline, SeatBookingOrdersInline, TableSeatsInline, UserAuthTokensInline
 
 admin.site.site_header = f"""SmartServe {_("Administration")}"""
 admin.site.site_title = f"""SmartServe {_("Admin")}"""
@@ -160,14 +161,15 @@ class UserAdmin(DjangoUserAdmin):
 
 @admin.register(Restaurant)
 class RestaurantAdmin(ModelAdmin):
-    fields = ("name", ("employee_count", "employees"), "table_count")
-    list_display = ("name", "employee_count", "table_count")
+    form = RestaurantModelForm
+    fields = ("name", ("employee_count", "employees"), ("menu_item_count", "menu_items"), "table_count")
+    list_display = ("name", "employee_count", "table_count", "menu_item_count")
     list_filter = (RestaurantEmployeeCountListFilter, RestaurantTableCountListFilter)
     inlines = (RestaurantTablesInline,)
     search_fields = ("name",)
     search_help_text = _("Search for a restaurant name")
     list_display_links = ("name",)
-    readonly_fields = ("employee_count", "table_count")
+    readonly_fields = ("employee_count", "table_count", "menu_item_count")
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[Restaurant]:
         """
@@ -178,10 +180,11 @@ class RestaurantAdmin(ModelAdmin):
 
         return super().get_queryset(request).annotate(  # type: ignore
             employee_count=models.Count("employees", distinct=True),
-            table_count=models.Count("tables", distinct=True)
+            table_count=models.Count("tables", distinct=True),
+            menu_item_count=models.Count("menu_items", distinct=True)
         )
 
-    @admin.display(description=_("Number of Employees"), ordering="_employee_count")
+    @admin.display(description=_("Number of Employees"), ordering="employee_count")
     def employee_count(self, obj: Restaurant | None) -> int | str:
         """
             Returns the number of employees this restaurant has, to be displayed
@@ -193,7 +196,7 @@ class RestaurantAdmin(ModelAdmin):
 
         return obj.employee_count  # type: ignore
 
-    @admin.display(description=_("Number of Tables (including Sub-Tables)"), ordering="_table_count")
+    @admin.display(description=_("Number of Tables (including Sub-Tables)"), ordering="table_count")
     def table_count(self, obj: Restaurant | None) -> int | str:
         """
             Returns the number of tables this restaurant has, to be displayed
@@ -204,6 +207,18 @@ class RestaurantAdmin(ModelAdmin):
             return admin.site.empty_value_display
 
         return obj.table_count  # type: ignore
+
+    @admin.display(description=_("Number of Menu Items"), ordering="employee_count")
+    def menu_item_count(self, obj: Restaurant | None) -> int | str:
+        """
+            Returns the number of menu items available at this restaurant, to be
+            displayed on the admin page.
+        """
+
+        if not obj:
+            return admin.site.empty_value_display
+
+        return obj.menu_item_count  # type: ignore
 
 
 @admin.register(Table)
@@ -328,7 +343,7 @@ class BookingAdmin(ModelAdmin):
     search_fields = ("seat_bookings__seat__table__number", "seat_bookings__seat__table__container_table__number", "seat_bookings__seat__table__restaurant__name")
     search_help_text = _("Search for a table number or restaurant name")
     list_display_links = ("id",)
-    readonly_fields = ("id", "restaurant",)
+    readonly_fields = ("id", "restaurant")
 
     def get_list_filter(self, request: HttpRequest) -> Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]]:
         list_filter: Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]] = super().get_list_filter(request)
@@ -338,11 +353,116 @@ class BookingAdmin(ModelAdmin):
 
         return list_filter
 
+    def get_search_results(self, request: HttpRequest, queryset: QuerySet[Booking], search_term: str) -> tuple[QuerySet[Booking], bool]:
+        # noinspection PyArgumentList,SpellCheckingInspection
+        if request.META.get("HTTP_X_REQUESTED_WITH") == "XMLHttpRequest" and "/autocomplete/" in request.path and request.GET.get("model_name") == "seatbooking" and "Referer" in request.headers:
+            split_referer_url: Sequence[str] = request.headers["Referer"].strip(r"/").split(r"/")
+            # noinspection SpellCheckingInspection
+            if "seatbooking" in split_referer_url:
+                try:
+                    # noinspection SpellCheckingInspection
+                    seat_booking_pk: int = int(split_referer_url[split_referer_url.index("seatbooking") + 1])
+                except ValueError:
+                    pass
+                else:
+                    try:
+                        seat_booking: SeatBooking = SeatBooking.objects.get(pk=seat_booking_pk)
+                    except Booking.DoesNotExist:
+                        pass
+                    else:
+                        if seat_booking.seat_id:
+                            queryset = queryset.filter(seat_bookings__seat__table__restaurant=seat_booking.seat.table.restaurant)
+
+        return super().get_search_results(request, queryset, search_term)
+
     @admin.display(description=_("Restaurant"))
     def restaurant(self, obj: Booking | None) -> Restaurant | str:
-        """ Returns the restaurant the tables of this booking are within, to be displayed on the admin page. """
+        """
+            Returns the restaurant the tables of this booking are within, to be
+            displayed on the admin page.
+        """
 
         if not obj or not obj.restaurant:
             return admin.site.empty_value_display
 
         return obj.restaurant
+
+
+@admin.register(SeatBooking)
+class SeatBookingAdmin(ModelAdmin):
+    fields = ("seat", "booking", ("start", "end"), "restaurant")
+    list_display = ("seat", "booking", "start", "end", "restaurant")
+    list_display_links = ("seat", "booking")
+    list_filter = (SeatBookingRestaurantListFilter, ("booking__start", DateTimeRangeFilter), ("booking__end", DateTimeRangeFilter))
+    search_fields = ("seat__table__number", "seat__table__container_table__number", "seat__table__restaurant__name")
+    search_help_text = _("Search for a table number or restaurant name")
+    readonly_fields = ("restaurant", "start", "end")
+    autocomplete_fields = ("seat", "booking")
+    inlines = (SeatBookingOrdersInline,)
+
+    def get_list_filter(self, request: HttpRequest) -> Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]]:
+        list_filter: Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]] = super().get_list_filter(request)
+
+        if Restaurant.objects.count() > 15:
+            list_filter = tuple(obj_filter for obj_filter in list_filter if obj_filter != SeatBookingRestaurantListFilter)
+
+        return list_filter
+
+    @admin.display(description=_("Restaurant"), ordering="seat__table__restaurant")
+    def restaurant(self, obj: SeatBooking | None) -> Restaurant | str:
+        """ Returns the restaurant the seat is within. """
+
+        if not obj or not obj.seat or not obj.seat.table or not obj.seat.table.restaurant:
+            return admin.site.empty_value_display
+
+        return obj.seat.table.restaurant
+
+    @admin.display(description=_("Start"), ordering="booking__start")
+    def start(self, obj: SeatBooking | None) -> datetime | str:
+        """ Returns the booking's start date & time. """
+
+        if not obj or not obj.booking or not obj.booking.start:
+            return admin.site.empty_value_display
+
+        return obj.booking.start
+
+    @admin.display(description=_("End"), ordering="booking__end")
+    def end(self, obj: SeatBooking | None) -> datetime | str:
+        """ Returns the booking's end date & time. """
+
+        if not obj or not obj.booking or not obj.booking.end:
+            return admin.site.empty_value_display
+
+        return obj.booking.end
+
+
+@admin.register(MenuItem)
+class MenuItemAdmin(ModelAdmin):
+    fields = ("name", "description", "available_at_restaurants")
+    list_display = ("name", "description")
+    list_display_links = ("name",)
+    filter_horizontal = ("available_at_restaurants",)
+    search_fields = ("name", "description", "available_at_restaurants__name")
+    search_help_text = _("Search for a menu item name, description or available at restaurant name")
+
+    def get_search_results(self, request: HttpRequest, queryset: QuerySet[MenuItem], search_term: str) -> tuple[QuerySet[MenuItem], bool]:
+        # noinspection PyArgumentList,SpellCheckingInspection
+        if request.META.get("HTTP_X_REQUESTED_WITH") == "XMLHttpRequest" and "/autocomplete/" in request.path and request.GET.get("model_name") == "order" and "Referer" in request.headers:
+            split_referer_url: Sequence[str] = request.headers["Referer"].strip(r"/").split(r"/")
+            # noinspection SpellCheckingInspection
+            if "seatbooking" in split_referer_url:
+                try:
+                    # noinspection SpellCheckingInspection
+                    seat_booking_pk: int = int(split_referer_url[split_referer_url.index("seatbooking") + 1])
+                except ValueError:
+                    pass
+                else:
+                    try:
+                        seat_booking: SeatBooking = SeatBooking.objects.get(pk=seat_booking_pk)
+                    except Booking.DoesNotExist:
+                        pass
+                    else:
+                        if seat_booking.booking_id:
+                            queryset = queryset.filter(available_at_restaurants=seat_booking.seat.table.restaurant)
+
+        return super().get_search_results(request, queryset, search_term)
