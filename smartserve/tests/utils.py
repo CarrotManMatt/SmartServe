@@ -8,6 +8,7 @@ import random
 from contextlib import AbstractContextManager, _GeneratorContextManager
 from datetime import datetime
 from functools import wraps
+from pathlib import Path
 from types import TracebackType
 from typing import Any, Callable, Iterable, Iterator
 
@@ -20,7 +21,7 @@ from django.test import TestCase as DjangoTestCase
 from django.utils import timezone
 
 from smartserve.exceptions import NotEnoughTestDataError
-from smartserve.models import Booking, MenuItem, Order, Restaurant, Seat, SeatBooking, Table, User
+from smartserve.models import Booking, Face, MenuItem, Order, Restaurant, Seat, SeatBooking, Table, User
 
 UNICODE_IDS: Iterable[int] = itertools.chain(
     range(32, 128),
@@ -136,6 +137,16 @@ def get_field_test_data(model_name: str, field_name: str) -> Iterable[str]:
         field_name, from the test data JSON file.
     """
 
+    if model_name == "face" and field_name == "image_url":
+        face_image_urls_path: Path = Path("face_image_urls.json")
+
+        if face_image_urls_path.is_file():
+            with open(face_image_urls_path, "r") as face_image_urls_file:
+                face_image_urls: Iterable[str] = json.load(face_image_urls_file)
+
+                if face_image_urls:
+                    return set(face_image_urls)
+
     if not TEST_DATA:
         raise ImproperlyConfigured(f"TEST_DATA_JSON_FILE_PATH cannot be empty when running tests.")
 
@@ -248,7 +259,9 @@ class TestTableFactory(BaseTestDataFactory):
     """
 
     MODEL: type[Model] = Table
-    ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {"number": itertools.count(1)}
+    ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {
+        "number": itertools.count(1)
+    }
 
     @classmethod
     def create(cls, *, save: bool = True, **kwargs: Any) -> Table:
@@ -290,7 +303,9 @@ class TestSeatFactory(BaseTestDataFactory):
     """
 
     MODEL: type[Model] = Seat
-    ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {"location_index": itertools.count(1)}
+    ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {
+        "location_index": itertools.count(1)
+    }
 
     @classmethod
     def create(cls, *, save: bool = True, **kwargs: Any) -> Seat:
@@ -378,6 +393,17 @@ class TestSeatBookingFactory(BaseTestDataFactory):
         if "booking" not in kwargs:
             kwargs.setdefault("booking", TestBookingFactory.create(**booking_kwargs))
 
+        face_kwargs: dict[str, Any] = {}
+        for face_field_name in copy.copy(kwargs).keys():
+            if face_field_name.startswith("face__"):
+                face_kwargs[face_field_name.removeprefix("face__")] = kwargs.pop(face_field_name)
+
+        if "face" in kwargs and face_kwargs:
+            raise ValueError("Invalid arguments supplied: choose one of \"face\" instance or \"face__\" attributes.")
+
+        if "face" not in kwargs:
+            kwargs.setdefault("face", TestFaceFactory.create(**face_kwargs))
+
         return super().create(save=save, **kwargs)
 
 
@@ -414,7 +440,8 @@ class TestOrderFactory(BaseTestDataFactory):
     MODEL: type[Model] = Order
     # noinspection PyProtectedMember
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {
-        "course": itertools.cycle(Order.Courses.values), "notes": iter(get_field_test_data(MODEL._meta.model_name or "order", "notes"))
+        "course": itertools.cycle(Order.Courses.values),
+        "notes": iter(get_field_test_data(MODEL._meta.model_name or "order", "notes"))
     }
 
     @classmethod
@@ -449,17 +476,29 @@ class TestOrderFactory(BaseTestDataFactory):
                     kwargs["menu_item"].available_at_restaurants.first()
                 )
 
-            kwargs.setdefault(
-                "seat_booking",
-                TestSeatBookingFactory.create(**seat_booking_kwargs)
-            )
+            kwargs.setdefault("seat_booking", TestSeatBookingFactory.create(**seat_booking_kwargs))
 
         if kwargs["menu_item"] and kwargs["seat_booking"] and created_menu_item:
-            kwargs["menu_item"].available_at_restaurants.add(
-                kwargs["seat_booking"].seat.table.restaurant
-            )
+            kwargs["menu_item"].available_at_restaurants.add(kwargs["seat_booking"].seat.table.restaurant)
 
         return super().create(save=save, **kwargs)
+
+
+class TestFaceFactory(BaseTestDataFactory):
+    # noinspection SpellCheckingInspection
+    """
+        Helper class to provide functions that create test data for
+        :model:`smartserve.face` object instances.
+    """
+
+    MODEL: type[Model] = Face
+    # noinspection PyProtectedMember
+    ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]] = {
+        "image_url": iter(get_field_test_data(MODEL._meta.model_name or "face", "image_url")),
+        "gender_value": itertools.cycle(Face.GenderValues.values),
+        "skin_colour_value": itertools.cycle(Face.SkinColourValues.values),
+        "age_category": itertools.cycle(Face.AgeCategories.values),
+    }
 
 
 class TestCase(DjangoTestCase):
@@ -471,7 +510,8 @@ class TestCase(DjangoTestCase):
         TestBookingFactory,
         TestSeatBookingFactory,
         TestMenuItemFactory,
-        TestOrderFactory
+        TestOrderFactory,
+        TestFaceFactory
     }
 
     def setUp(self) -> None:

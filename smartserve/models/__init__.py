@@ -1,5 +1,6 @@
+import sys
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser
@@ -113,7 +114,10 @@ class Restaurant(CustomBaseModel):
     name = models.CharField(
         _("Name"),
         max_length=100,
-        validators=[RegexValidator(r"^(?![\s'-])(?!.*[\s'-]{2})[A-Za-z '-]+(?<![\s'-])\Z"), MinLengthValidator(2)]
+        validators=[
+            RegexValidator(r"^(?![\s'-])(?!.*[\s'-]{2})[A-Za-z '-]+(?<![\s'-])\Z"),
+            MinLengthValidator(2)
+        ]
     )
     employees = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
@@ -241,12 +245,13 @@ class Table(CustomBaseModel):
             if self.pk and not check_container_table_not_in_sub_tables(self, self.container_table):
                 raise ValidationError({"container_table": _("The parent container table cannot be a sub-table of this table.")}, code="invalid")
 
-    def create_booking(self, start: datetime, end: datetime) -> "Booking":
+    def create_booking(self, start: datetime, end: datetime, faces: Sequence["Face"]) -> "Booking":
         booking: Booking = Booking.objects.create(start=start, end=end)
 
         seat: Seat
-        for seat in self.seats.all():
-            SeatBooking.objects.create(seat=seat, booking=booking)
+        face: Face
+        for seat, face in zip(self.seats.all(), faces):
+            SeatBooking.objects.create(seat=seat, booking=booking, face=face)
 
         booking.refresh_from_db()
         return booking
@@ -363,6 +368,15 @@ class SeatBooking(CustomBaseModel):
         blank=False,
         null=False
     )
+    face = models.ForeignKey(
+        "Face",
+        on_delete=models.PROTECT,
+        related_name="bookings",
+        verbose_name=_("Face"),
+        help_text=_("The face to represent the customer of this seat booking."),
+        blank=False,
+        null=False
+    )
     ordered_menu_items = models.ManyToManyField(
         "MenuItem",
         related_name="+",
@@ -379,6 +393,10 @@ class SeatBooking(CustomBaseModel):
             models.UniqueConstraint(
                 fields=("seat", "booking"),
                 name="unique_seat_booking"
+            ),
+            models.UniqueConstraint(
+                fields=("booking", "face"),
+                name="face_unique_in_booking"
             )
         ]
 
@@ -447,8 +465,6 @@ class Order(CustomBaseModel):
     )
     course = models.PositiveIntegerField(
         _("Course"),
-        null=False,
-        blank=False,
         choices=Courses.choices
     )
     notes = models.TextField(
@@ -472,3 +488,53 @@ class Order(CustomBaseModel):
 
     def get_absolute_url(self) -> str:  # TODO
         raise NotImplementedError
+
+
+class Face(CustomBaseModel):
+    class GenderValues(models.IntegerChoices):
+        """ Enum of gender numbers. """
+
+        ONE = 1, "1"
+        TWO = 2, "2"
+        THREE = 3, "3"
+
+    class SkinColourValues(models.IntegerChoices):
+        """ Enum of skin colour numbers using the Fitzpatrick scale. """
+
+        TWO = 2, "2"
+        THREE = 3, "3"
+        FOUR = 4, "4"
+        FIVE = 5, "5"
+        SIX = 6, "6"
+
+    class AgeCategories(models.TextChoices):
+        """ Enum of age categories. """
+
+        YOUNG = "YNG", _("Young")
+        AVERAGE = "AVG", _("Average")
+        OLD = "OLD", _("Old")
+
+    image_url = models.URLField(
+        _("Image URL"),
+        max_length=500,
+        unique=True
+    )
+    gender_value = models.PositiveIntegerField(
+        _("Gender Value"),
+        choices=GenderValues.choices
+    )
+    skin_colour_value = models.PositiveIntegerField(
+        _("Skin Colour Value"),
+        choices=SkinColourValues.choices
+    )
+    age_category = models.CharField(
+        _("Age Category"),
+        max_length=3,
+        choices=AgeCategories.choices
+    )
+
+    class Meta:
+        verbose_name = _("Face")
+
+    def __str__(self) -> str:
+        return f"{str(hash(self.image_url) + sys.maxsize + 1)[:12]} - {self.gender_value}{self.skin_colour_value}{self.age_category}"

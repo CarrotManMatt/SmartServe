@@ -15,7 +15,7 @@ from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 from rangefilter.filters import DateTimeRangeFilter, DateTimeRangeFilterBuilder
 
-from smartserve.models import Booking, MenuItem, Restaurant, Seat, SeatBooking, Table, User
+from smartserve.models import Booking, Face, MenuItem, Restaurant, Seat, SeatBooking, Table, User
 from .filters import BookingRestaurantListFilter, RestaurantEmployeeCountListFilter, RestaurantTableCountListFilter, SeatBookingRestaurantListFilter, SeatRestaurantListFilter, TableIsSubTableFilter, TableRestaurantListFilter, UserGroupListFilter, UserIsActiveListFilter, UserIsStaffListFilter
 from .forms import RestaurantModelForm, UserChangeForm
 from .inlines import BookingSeatBookingsInline, RestaurantTablesInline, SeatBookingOrdersInline, TableSeatsInline, UserAuthTokensInline
@@ -112,7 +112,7 @@ class UserAdmin(DjangoUserAdmin):
     )
     search_fields = ("employee_id", "first_name", "last_name")
     ordering = ("first_name", "last_name")
-    search_help_text = _("Search for an employee ID, first name or last name")
+    search_help_text = _("Search for a user's employee ID, first name or last name")
 
     @admin.display(description="Date Joined", ordering="date_joined")
     def date_joined(self, obj: User | None) -> str:
@@ -162,12 +162,20 @@ class UserAdmin(DjangoUserAdmin):
 @admin.register(Restaurant)
 class RestaurantAdmin(ModelAdmin):
     form = RestaurantModelForm
-    fields = ("name", ("employee_count", "employees"), ("menu_item_count", "menu_items"), "table_count")
+    fields = (
+        "name",
+        ("employee_count", "employees"),
+        ("menu_item_count", "menu_items"),
+        "table_count"
+    )
     list_display = ("name", "employee_count", "table_count", "menu_item_count")
-    list_filter = (RestaurantEmployeeCountListFilter, RestaurantTableCountListFilter)
+    list_filter = (
+        RestaurantEmployeeCountListFilter,
+        RestaurantTableCountListFilter
+    )
     inlines = (RestaurantTablesInline,)
     search_fields = ("name",)
-    search_help_text = _("Search for a restaurant name")
+    search_help_text = _("Search for a restaurant's name")
     list_display_links = ("name",)
     readonly_fields = ("employee_count", "table_count", "menu_item_count")
 
@@ -229,7 +237,7 @@ class TableAdmin(ModelAdmin):
     list_filter = (TableIsSubTableFilter, TableRestaurantListFilter)
     inlines = (TableSeatsInline,)
     search_fields = ("number", "restaurant__name", "container_table__number")
-    search_help_text = _("Search for a table number or restaurant name")
+    search_help_text = _("Search for a table number or restaurant's name")
     list_display_links = ("number",)
     list_editable = ("container_table",)
     autocomplete_fields = ("restaurant", "container_table")
@@ -298,8 +306,12 @@ class SeatAdmin(ModelAdmin):
     ordering = ("table", "location_index")
     list_display = ("location_index", "table")
     list_filter = (SeatRestaurantListFilter,)
-    search_fields = ("table__number", "table__container_table__number", "table__restaurant__name")
-    search_help_text = _("Search for a table number or restaurant name")
+    search_fields = (
+        "table__number",
+        "table__container_table__number",
+        "table__restaurant__name"
+    )
+    search_help_text = _("Search for a table number or restaurant's name")
     list_editable = ("location_index", "table")
     list_display_links = None
     autocomplete_fields = ("table",)
@@ -338,10 +350,18 @@ class BookingAdmin(ModelAdmin):
     ordering = ("start",)
     fields = ("id", ("start", "end"), "restaurant")
     list_display = ("id", "start", "end", "restaurant")
-    list_filter = (BookingRestaurantListFilter, ("start", DateTimeRangeFilter), ("end", DateTimeRangeFilter))
+    list_filter = (
+        BookingRestaurantListFilter,
+        ("start", DateTimeRangeFilter),
+        ("end", DateTimeRangeFilter)
+    )
     inlines = (BookingSeatBookingsInline,)
-    search_fields = ("seat_bookings__seat__table__number", "seat_bookings__seat__table__container_table__number", "seat_bookings__seat__table__restaurant__name")
-    search_help_text = _("Search for a table number or restaurant name")
+    search_fields = (
+        "seat_bookings__seat__table__number",
+        "seat_bookings__seat__table__container_table__number",
+        "seat_bookings__seat__table__restaurant__name"
+    )
+    search_help_text = _("Search for a table number or restaurant's name")
     list_display_links = ("id",)
     readonly_fields = ("id", "restaurant")
 
@@ -390,14 +410,28 @@ class BookingAdmin(ModelAdmin):
 
 @admin.register(SeatBooking)
 class SeatBookingAdmin(ModelAdmin):
-    fields = ("seat", "booking", ("start", "end"), "restaurant")
-    list_display = ("seat", "booking", "start", "end", "restaurant")
+    fields = (("seat", "booking"), "face", ("start", "end"), "restaurant")
+    list_display = ("seat", "booking", "face", "start", "end", "restaurant")
     list_display_links = ("seat", "booking")
-    list_filter = (SeatBookingRestaurantListFilter, ("booking__start", DateTimeRangeFilter), ("booking__end", DateTimeRangeFilter))
-    search_fields = ("seat__table__number", "seat__table__container_table__number", "seat__table__restaurant__name")
-    search_help_text = _("Search for a table number or restaurant name")
+    list_filter = (
+        SeatBookingRestaurantListFilter,
+        "face__gender_value",
+        "face__skin_colour_value",
+        "face__age_category",
+        ("booking__start", DateTimeRangeFilter),
+        ("booking__end", DateTimeRangeFilter)
+    )
+    search_fields = (
+        "seat__table__number",
+        "seat__table__container_table__number",
+        "seat__table__restaurant__name",
+        "face__gender_value",
+        "face__skin_colour_value",
+        "face__age_category"
+    )
+    search_help_text = _("Search for a table number, restaurant's name, face's gender value, face's skin colour value or face's age category")
     readonly_fields = ("restaurant", "start", "end")
-    autocomplete_fields = ("seat", "booking")
+    autocomplete_fields = ("seat", "booking", "face")
     inlines = (SeatBookingOrdersInline,)
 
     def get_list_filter(self, request: HttpRequest) -> Sequence[type[admin.ListFilter] | str | models.Field | tuple[str | models.Field, type[admin.FieldListFilter]] | list[str | models.Field | type[admin.FieldListFilter]]]:
@@ -443,7 +477,7 @@ class MenuItemAdmin(ModelAdmin):
     list_display_links = ("name",)
     filter_horizontal = ("available_at_restaurants",)
     search_fields = ("name", "description", "available_at_restaurants__name")
-    search_help_text = _("Search for a menu item name, description or available at restaurant name")
+    search_help_text = _("Search for a menu item's name, description or available at restaurant's name")
 
     def get_search_results(self, request: HttpRequest, queryset: QuerySet[MenuItem], search_term: str) -> tuple[QuerySet[MenuItem], bool]:
         # noinspection PyArgumentList,SpellCheckingInspection
@@ -466,3 +500,25 @@ class MenuItemAdmin(ModelAdmin):
                             queryset = queryset.filter(available_at_restaurants=seat_booking.seat.table.restaurant)
 
         return super().get_search_results(request, queryset, search_term)
+
+
+@admin.register(Face)
+class FaceAdmin(ModelAdmin):
+    fields = (
+        "image_url",
+        ("gender_value", "skin_colour_value", "age_category")
+    )
+    list_display = (
+        "image_url",
+        "gender_value",
+        "skin_colour_value",
+        "age_category"
+    )
+    list_display_links = ("image_url",)
+    search_fields = (
+        "image_url",
+        "gender_value",
+        "skin_colour_value",
+        "age_category"
+    )
+    search_help_text = _("Search for a face's gender value, skin colour vale or age category")

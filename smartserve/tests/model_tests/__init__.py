@@ -1,4 +1,5 @@
 import random
+import sys
 from datetime import datetime, timedelta
 from typing import Any, Iterable
 
@@ -7,9 +8,9 @@ from django.db import IntegrityError
 from django.db.models import Manager
 from django.utils import timezone
 
-from smartserve.models import Booking, MenuItem, Order, Restaurant, Seat, SeatBooking, Table, User
+from smartserve.models import Booking, Face, MenuItem, Order, Restaurant, Seat, SeatBooking, Table, User
 from smartserve.tests import utils
-from smartserve.tests.utils import TestBookingFactory, TestCase, TestMenuItemFactory, TestOrderFactory, TestRestaurantFactory, TestSeatBookingFactory, TestSeatFactory, TestTableFactory, TestUserFactory
+from smartserve.tests.utils import TestBookingFactory, TestCase, TestFaceFactory, TestMenuItemFactory, TestOrderFactory, TestRestaurantFactory, TestSeatBookingFactory, TestSeatFactory, TestTableFactory, TestUserFactory
 
 
 class UserModelTests(TestCase):
@@ -394,7 +395,11 @@ class TableModelTests(TestCase):
         TestSeatFactory.create(table=table)
         TestSeatFactory.create(table=table)
 
-        booking: Booking = table.create_booking(start_end_pair[0], start_end_pair[1])
+        booking: Booking = table.create_booking(
+            start_end_pair[0],
+            start_end_pair[1],
+            [TestFaceFactory.create() for _ in range(5)]
+        )
 
         self.assertIsInstance(booking, Booking)
         self.assertEqual(start_end_pair[0], booking.start)
@@ -549,6 +554,10 @@ class SeatBookingModelTests(TestCase):
         with self.assertRaisesMessage(ValidationError, "field cannot be null"):
             TestSeatBookingFactory.create(booking=None)
 
+    def test_face_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestSeatBookingFactory.create(face=None)
+
     def test_ordered_menu_items_multiple_of_menu_item(self) -> None:
         menu_item: MenuItem = TestMenuItemFactory.create()
         seat_booking: SeatBooking = TestSeatBookingFactory.create()
@@ -594,6 +603,16 @@ class SeatBookingModelTests(TestCase):
             )
         except ValidationError as validate_error:
             self.fail(f"ValidationError raised: {validate_error}")
+
+    def test_face_unique_in_booking(self) -> None:
+        seat_booking: SeatBooking = TestSeatBookingFactory.create()
+
+        with self.assertRaisesMessage(ValidationError, "this Booking and Face already exists"):
+            TestSeatBookingFactory.create(
+                face=seat_booking.face,
+                booking=seat_booking.booking,
+                seat__table__restaurant=seat_booking.seat.table.restaurant
+            )
 
     def test_validate_table_restaurant_is_booking_restaurant(self) -> None:
         seat_booking: SeatBooking = TestSeatBookingFactory.create()
@@ -749,3 +768,46 @@ class OrderModelTests(TestCase):
             )
         except ValidationError as validate_error:
             self.fail(f"ValidationError raised: {validate_error}")
+
+
+class FaceModelTests(TestCase):
+    def test_image_url_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestFaceFactory.create(image_url=None)
+
+        with self.assertRaisesMessage(ValidationError, "field cannot be blank"):
+            TestFaceFactory.create(image_url="")
+
+    def test_image_url_validate_unique(self) -> None:
+        face: Face = TestFaceFactory.create()
+
+        with self.assertRaisesMessage(ValidationError, "Image URL already exists"):
+            TestFaceFactory.create(image_url=face.image_url)
+
+    def test_gender_value_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestFaceFactory.create(gender_value=None)
+
+    def test_gender_value_validate_not_zero(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "0 is not a valid choice"):
+            TestFaceFactory.create(gender_value=0)
+
+    def test_skin_colour_value_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestFaceFactory.create(skin_colour_value=None)
+
+    def test_skin_colour_value_validate_not_zero(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "0 is not a valid choice"):
+            TestFaceFactory.create(skin_colour_value=0)
+
+    def test_age_category_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
+            TestFaceFactory.create(age_category=None)
+
+    def test_str(self) -> None:
+        face: Face = TestFaceFactory.create()
+
+        self.assertIn(str(hash(face.image_url) + sys.maxsize + 1)[:12], str(face))
+        self.assertIn(str(face.gender_value), str(face))
+        self.assertIn(str(face.skin_colour_value), str(face))
+        self.assertIn(str(face.age_category), str(face))
