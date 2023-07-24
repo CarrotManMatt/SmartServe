@@ -6,7 +6,7 @@
 
 from copy import copy
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable,   Sequence
 
 from django.core.exceptions import ImproperlyConfigured
 from environ import Env

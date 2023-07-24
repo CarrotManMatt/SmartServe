@@ -8,10 +8,13 @@ from typing import Any, Callable, Sequence
 from django.contrib import admin
 from django.contrib.admin import ModelAdmin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.templatetags import static
 from django.db import models
 from django.db.models import QuerySet
 from django.forms import ModelForm
 from django.http import HttpRequest
+from django.utils import html, safestring
+from django.utils.safestring import SafeString
 from django.utils.translation import gettext_lazy as _
 from rangefilter.filters import DateTimeRangeFilter, DateTimeRangeFilterBuilder
 
@@ -505,16 +508,18 @@ class MenuItemAdmin(ModelAdmin):
 @admin.register(Face)
 class FaceAdmin(ModelAdmin):
     fields = (
-        "image_url",
+        ("image_url", "html_image"),
         ("gender_value", "skin_colour_value", "age_category")
     )
     list_display = (
-        "image_url",
+        "__str__",
         "gender_value",
         "skin_colour_value",
-        "age_category"
+        "age_category",
+        "html_image"
     )
-    list_display_links = ("image_url",)
+    list_display_links = ("__str__",)
+    list_filter = ("gender_value", "skin_colour_value", "age_category")
     search_fields = (
         "image_url",
         "gender_value",
@@ -522,3 +527,14 @@ class FaceAdmin(ModelAdmin):
         "age_category"
     )
     search_help_text = _("Search for a face's gender value, skin colour vale or age category")
+    readonly_fields = ("html_image",)
+
+    @admin.display(description=_("Image"))
+    def html_image(self, obj: Face | None) -> SafeString:
+        """ Returns the HTML-safe tag containing the image URLn. """
+
+        src: str
+        alt: str
+        src, alt = (html.escape(obj.image_url), html.escape(obj.get_alt_text())) if obj and obj.image_url else (static.static("smartserve/faces/no-image.svg"), "no-image")
+
+        return safestring.mark_safe(f"""<img width=\"150\" height=\"150\" src=\"{src}\" alt=\"{alt}\"/>""")

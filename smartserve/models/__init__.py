@@ -514,7 +514,7 @@ class Face(CustomBaseModel):
         AVERAGE = "AVG", _("Average")
         OLD = "OLD", _("Old")
 
-    image_url = models.URLField(
+    image_url = models.URLField(  # TODO: Decide whether to store images locally
         _("Image URL"),
         max_length=500,
         unique=True
@@ -538,3 +538,13 @@ class Face(CustomBaseModel):
 
     def __str__(self) -> str:
         return f"{str(hash(self.image_url) + sys.maxsize + 1)[:12]} - {self.gender_value}{self.skin_colour_value}{self.age_category}"
+
+    def get_alt_text(self) -> str:
+        """
+            Generates the alternative description text for this face's image
+            (for when the image at the given URl cannot be displayed).
+        """
+
+        age_category_display: str = self.get_age_category_display()
+
+        return f"""An AI generated photograph of a{"n " if age_category_display[0] in ("a", "e", "h", "i", "o", "u") else " "}{age_category_display.lower()} person with a gender value of {self.gender_value} and a skin colour value of {self.skin_colour_value}."""
