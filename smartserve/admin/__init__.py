@@ -508,8 +508,9 @@ class MenuItemAdmin(ModelAdmin):
 @admin.register(Face)
 class FaceAdmin(ModelAdmin):
     fields = (
-        ("image_url", "html_image"),
-        ("gender_value", "skin_colour_value", "age_category")
+        ("image", "html_image"),
+        ("gender_value", "skin_colour_value", "age_category"),
+        "image_hash"
     )
     list_display = (
         "__str__",
@@ -521,20 +522,20 @@ class FaceAdmin(ModelAdmin):
     list_display_links = ("__str__",)
     list_filter = ("gender_value", "skin_colour_value", "age_category")
     search_fields = (
-        "image_url",
+        "image_hash",
         "gender_value",
         "skin_colour_value",
         "age_category"
     )
-    search_help_text = _("Search for a face's gender value, skin colour vale or age category")
-    readonly_fields = ("html_image",)
+    search_help_text = _("Search for a face's image hash, gender value, skin colour vale or age category")
+    readonly_fields = ("html_image", "image_hash")
 
     @admin.display(description=_("Image"))
     def html_image(self, obj: Face | None) -> SafeString:
-        """ Returns the HTML-safe tag containing the image URLn. """
+        """ Returns the HTML-safe tag containing the image URL. """
 
         src: str
         alt: str
-        src, alt = (html.escape(obj.image_url), html.escape(obj.get_alt_text())) if obj and obj.image_url else (static.static("smartserve/faces/no-image.svg"), "no-image")
+        src, alt = (html.escape(obj.image.url), html.escape(obj.alt_text)) if obj and obj.image else (static.static("smartserve/faces/no-image.svg"), "no-image")
 
         return safestring.mark_safe(f"""<img width=\"150\" height=\"150\" src=\"{src}\" alt=\"{alt}\"/>""")

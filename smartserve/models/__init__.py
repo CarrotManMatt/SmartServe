@@ -1,16 +1,23 @@
-import sys
+import hashlib
+import io
+import json
+import logging
 from datetime import datetime
-from typing import Any, Callable, Sequence
+from pathlib import Path
+from typing import Any, Callable, Iterable, Iterator, Sequence
 
+import requests
 from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import Permission, PermissionsMixin
 from django.core.exceptions import ValidationError
+from django.core.files import File
 from django.core.validators import MinLengthValidator, MinValueValidator, RegexValidator
 from django.db import models
 from django.db.models import Manager, Model, QuerySet
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from requests import RequestException, Response
 
 from . import utils
 from .managers import UserManager
@@ -514,9 +521,18 @@ class Face(CustomBaseModel):
         AVERAGE = "AVG", _("Average")
         OLD = "OLD", _("Old")
 
-    image_url = models.URLField(  # TODO: Decide whether to store images locally
-        _("Image URL"),
-        max_length=500,
+    image = models.ImageField(
+        _("Image"),
+        upload_to="faces/uploads/",
+        null=False,
+        blank=False
+    )
+    image_hash = models.CharField(
+        _("SHA1 Image Hash"),
+        max_length=40,
+        editable=False,
+        null=False,
+        blank=False,
         unique=True
     )
     gender_value = models.PositiveIntegerField(
@@ -533,18 +549,87 @@ class Face(CustomBaseModel):
         choices=AgeCategories.choices
     )
 
-    class Meta:
-        verbose_name = _("Face")
+    @staticmethod
+    def _get_generatable_face_images_urls() -> Iterator[str]:
+        face_image_urls_path: Path = Path("face_image_urls.json")
 
-    def __str__(self) -> str:
-        return f"{str(hash(self.image_url) + sys.maxsize + 1)[:12]} - {self.gender_value}{self.skin_colour_value}{self.age_category}"
+        if not face_image_urls_path.is_file():
+            return iter(set())
 
-    def get_alt_text(self) -> str:
+        with open(face_image_urls_path, "r") as face_image_urls_file:
+            face_image_urls: Iterable[str] = json.load(face_image_urls_file)
+
+        if not face_image_urls:
+            return iter(set())
+
+        return iter(set(face_image_urls))
+
+    _generatable_face_images_urls: Iterator[str] = _get_generatable_face_images_urls()
+
+    @property
+    def alt_text(self) -> str:
         """
             Generates the alternative description text for this face's image
             (for when the image at the given URl cannot be displayed).
         """
 
-        age_category_display: str = self.get_age_category_display()
+        lower_age_category_display: str = self.get_age_category_display().lower()
 
-        return f"""An AI generated photograph of a{"n " if age_category_display[0] in ("a", "e", "h", "i", "o", "u") else " "}{age_category_display.lower()} person with a gender value of {self.gender_value} and a skin colour value of {self.skin_colour_value}."""
+        return f"""An AI generated photograph of a{"n " if lower_age_category_display[0] in ("a", "e", "h", "i", "o", "u") else " "}{lower_age_category_display}{" aged" if lower_age_category_display == "average" else ""} person with a gender value of {self.gender_value} and a skin colour value of {self.skin_colour_value}."""
+
+    class Meta:
+        verbose_name = _("Face")
+
+    def __str__(self) -> str:
+        return f"{self.image_hash[:12]} - {self.gender_value}{self.skin_colour_value}{self.age_category}"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        sha1_hash = hashlib.sha1()
+
+        closed: bool = self.image.closed
+        image_file: File = self.image.open("rb")
+
+        byte_block: bytes
+        for byte_block in iter(lambda: image_file.read(4096), b""):  # NOTE: Read and update hash string value in blocks of 4K
+            sha1_hash.update(byte_block)
+        self.image_hash = sha1_hash.hexdigest()
+
+        if closed:
+            self.image.close()
+
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def generate_image(cls) -> File:
+        def attempt_get_image(image_url: str, attempts: int) -> File:
+            if attempts >= 2:
+                return cls.image_from_url(image_url)
+
+            else:
+                try:
+                    return cls.image_from_url(image_url)
+
+                except RequestException:
+                    logging.warning(f"Image for face could not be retrieved at URL: {image_url} (Trying again with next URL).")
+
+                    return attempt_get_image(
+                        next(cls._generatable_face_images_urls),
+                        attempts + 1
+                    )
+
+        return attempt_get_image(
+            next(cls._generatable_face_images_urls),
+            0
+        )
+
+    @staticmethod
+    def image_from_url(image_url: str) -> File:
+        image_url_response: Response = requests.get(image_url, stream=True)
+
+        if image_url_response.status_code != 200:
+            raise RequestException(f"Image for face could not be retrieved at URL: {image_url}")
+
+        return File(
+            io.BytesIO(image_url_response.raw.read()),
+            name=image_url.split("/")[-1]
+        )

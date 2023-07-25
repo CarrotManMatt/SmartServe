@@ -44,8 +44,8 @@ fabric.properties
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
-media
-SmartServe/staticfiles/
+media/
+staticfiles/
 
 
 ### Python
@@ -146,3 +146,4 @@ cython_debug/
 
 # Test Data
 test_data.json
+faces/

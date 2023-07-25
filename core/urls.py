@@ -3,6 +3,8 @@
 """
 
 import django.urls
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import URLPattern, URLResolver
 from knox.views import LogoutAllView, LogoutView
@@ -37,4 +39,4 @@ urlpatterns: list[URLResolver | URLPattern] = [
         name="knox_logoutall"
     ),
     django.urls.path("api/", django.urls.include("smartserve.urls"))
-]
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

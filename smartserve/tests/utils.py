@@ -3,6 +3,7 @@ import copy
 import functools
 import itertools
 import json
+import logging
 import random
 # noinspection PyProtectedMember,PyUnresolvedReferences
 from contextlib import AbstractContextManager, _GeneratorContextManager
@@ -15,10 +16,12 @@ from typing import Any, Callable, Iterable, Iterator
 from django.conf import settings
 from django.contrib import auth
 from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core.files import File
 from django.db import IntegrityError, transaction
 from django.db.models import Model
 from django.test import TestCase as DjangoTestCase
 from django.utils import timezone
+from requests import RequestException
 
 from smartserve.exceptions import NotEnoughTestDataError
 from smartserve.models import Booking, Face, MenuItem, Order, Restaurant, Seat, SeatBooking, Table, User
@@ -144,8 +147,8 @@ def get_field_test_data(model_name: str, field_name: str) -> Iterable[str]:
             with open(face_image_urls_path, "r") as face_image_urls_file:
                 face_image_urls: Iterable[str] = json.load(face_image_urls_file)
 
-                if face_image_urls:
-                    return set(face_image_urls)
+            if face_image_urls:
+                return set(face_image_urls)
 
     if not TEST_DATA:
         raise ImproperlyConfigured(f"TEST_DATA_JSON_FILE_PATH cannot be empty when running tests.")
@@ -161,6 +164,7 @@ class BaseTestDataFactory(abc.ABC):
 
     MODEL: type[Model]
     ORIGINAL_TEST_DATA_ITERATORS: dict[str, Iterator[Any]]
+    EXCLUDED_TEST_DATA_ITERATORS: set[str] = set()
     test_data_iterators: dict[str, Iterator[Any]]
 
     @classmethod
@@ -178,7 +182,7 @@ class BaseTestDataFactory(abc.ABC):
         previous_test_data_iterators: dict[str, Iterator[Any]] = copy.deepcopy(cls.test_data_iterators)
 
         for field_name in cls.test_data_iterators.keys():
-            if field_name not in kwargs:
+            if field_name not in kwargs and field_name not in cls.EXCLUDED_TEST_DATA_ITERATORS:
                 kwargs.setdefault(field_name, cls.create_field_value(field_name))
 
         try:
@@ -188,12 +192,16 @@ class BaseTestDataFactory(abc.ABC):
                 else:
                     return cls.MODEL.objects.create(**kwargs)
             else:
-                # noinspection PyCallingNonCallable
                 return cls.MODEL(**kwargs)
 
         except (ValidationError, IntegrityError):
             cls.test_data_iterators = previous_test_data_iterators
             raise
+        finally:
+            file_field_value: File
+            for file_field_value in kwargs.values():
+                if isinstance(file_field_value, File):
+                    file_field_value.close()
 
     @classmethod
     def create_field_value(cls, field_name: str) -> Any:
@@ -352,11 +360,8 @@ class TestBookingFactory(BaseTestDataFactory):
         if field_name == "start_end_pair":
             time_stamp: float = random.uniform(0, 2524607999.999)
             return datetime.fromtimestamp(time_stamp, timezone.get_current_timezone()), datetime.fromtimestamp(time_stamp + random.uniform(600, 32400), timezone.get_current_timezone())
-        else:
-            try:
-                return next(cls.test_data_iterators[field_name])
-            except StopIteration as test_data_iterator_error:
-                raise NotEnoughTestDataError(field_name=field_name) from test_data_iterator_error
+
+        return super().create_field_value(field_name)
 
 
 class TestSeatBookingFactory(BaseTestDataFactory):
@@ -499,6 +504,54 @@ class TestFaceFactory(BaseTestDataFactory):
         "skin_colour_value": itertools.cycle(Face.SkinColourValues.values),
         "age_category": itertools.cycle(Face.AgeCategories.values),
     }
+    EXCLUDED_TEST_DATA_ITERATORS: set[str] = {"image_url"}
+
+    @classmethod
+    def create_field_value(cls, field_name: str) -> Any:
+        """
+            Helper function to return a new arbitrary value for the given field
+            name.
+        """
+
+        field_value: Any
+
+        if field_name == "image":
+            def attempt_get_image(image_url: str, attempts: int) -> File:
+                if attempts >= 2:
+                    return Face.image_from_url(image_url)
+
+                else:
+                    try:
+                        return Face.image_from_url(image_url)
+
+                    except RequestException:
+                        logging.warning(f"Image for face could not be retrieved at URL: {image_url} (Trying again with next test URL).")
+
+                        return attempt_get_image(
+                            super().create_field_value("image_url"),  # type: ignore
+                            attempts + 1
+                        )
+
+            field_value = attempt_get_image(
+                super().create_field_value("image_url"), attempts=0
+            )
+
+        else:
+            field_value = super().create_field_value(field_name)
+
+        return field_value
+
+    @classmethod
+    def create(cls, *, save: bool = True, **kwargs: Any) -> Face:
+        if "image" in kwargs and "image_url" in kwargs:
+            raise ValueError("Invalid arguments supplied: choose one of \"image\" or \"image_url\".")
+
+        if "image_url" in kwargs:
+            kwargs.setdefault("image", Face.image_from_url(kwargs["image_url"]))
+        else:
+            kwargs.setdefault("image", cls.create_field_value("image"))
+
+        return super().create(save=save, **kwargs)
 
 
 class TestCase(DjangoTestCase):

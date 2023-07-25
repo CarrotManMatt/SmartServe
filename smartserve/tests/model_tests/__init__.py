@@ -1,5 +1,4 @@
 import random
-import sys
 from datetime import datetime, timedelta
 from typing import Any, Iterable
 
@@ -771,18 +770,26 @@ class OrderModelTests(TestCase):
 
 
 class FaceModelTests(TestCase):
-    def test_image_url_validate_required(self) -> None:
-        with self.assertRaisesMessage(ValidationError, "field cannot be null"):
-            TestFaceFactory.create(image_url=None)
+    def test_image_validate_required(self) -> None:
+        with self.assertRaisesMessage(ValueError, "no file associated"):
+            TestFaceFactory.create(image=None)
 
-        with self.assertRaisesMessage(ValidationError, "field cannot be blank"):
-            TestFaceFactory.create(image_url="")
-
-    def test_image_url_validate_unique(self) -> None:
+    def test_image_hash_created(self) -> None:
         face: Face = TestFaceFactory.create()
 
-        with self.assertRaisesMessage(ValidationError, "Image URL already exists"):
-            TestFaceFactory.create(image_url=face.image_url)
+        self.assertTrue(hasattr(face, "image_hash"))
+        self.assertIsInstance(face.image_hash, str)
+        self.assertEqual(len(face.image_hash), 40)
+        try:
+            int(face.image_hash, 16)
+        except ValueError:
+            self.fail("face.image_hash is not valid SHA1 hash.")
+
+    def test_image_hash_validate_unique(self) -> None:
+        face: Face = TestFaceFactory.create()
+
+        with self.assertRaisesMessage(ValidationError, "Hash already exists"):
+            TestFaceFactory.create(image=face.image)
 
     def test_gender_value_validate_required(self) -> None:
         with self.assertRaisesMessage(ValidationError, "field cannot be null"):
@@ -804,10 +811,19 @@ class FaceModelTests(TestCase):
         with self.assertRaisesMessage(ValidationError, "field cannot be null"):
             TestFaceFactory.create(age_category=None)
 
+    def test_alt_text(self) -> None:
+        face: Face = TestFaceFactory.create()
+
+        self.assertIn(face.get_age_category_display().lower(), face.alt_text)
+        self.assertIn(str(face.gender_value), face.alt_text)
+        self.assertIn(str(face.skin_colour_value), face.alt_text)
+        self.assertIn("AI generated photograph of", face.alt_text)
+        self.assertIn("person", face.alt_text)
+
     def test_str(self) -> None:
         face: Face = TestFaceFactory.create()
 
-        self.assertIn(str(hash(face.image_url) + sys.maxsize + 1)[:12], str(face))
+        self.assertIn(face.image_hash[:12], str(face))
         self.assertIn(str(face.gender_value), str(face))
         self.assertIn(str(face.skin_colour_value), str(face))
         self.assertIn(str(face.age_category), str(face))

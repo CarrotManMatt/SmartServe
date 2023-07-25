@@ -6,7 +6,7 @@
 
 from copy import copy
 from pathlib import Path
-from typing import Any, Iterable,   Sequence
+from typing import Any, Iterable, Sequence
 
 from django.core.exceptions import ImproperlyConfigured
 from environ import Env
@@ -128,8 +128,10 @@ WSGI_APPLICATION = "core.wsgi.application"
 ROOT_URLCONF = "core.urls"
 SECRET_KEY = env("SECRET_KEY")  # NOTE: Security Warning - The secret key is used for important secret stuff (keep the one used in production a secret!)
 # noinspection PyUnresolvedReferences
-STATIC_ROOT = "/staticfiles/"
+STATIC_ROOT = "staticfiles/"
 STATIC_URL = "static/"
+MEDIA_ROOT = "media/"
+MEDIA_URL = "media/"
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SECURE = True
 
