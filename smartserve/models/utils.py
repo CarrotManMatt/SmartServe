@@ -36,7 +36,7 @@ class CustomBaseModel(Model):
         abstract = True
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        proxy_fields: dict[str, Any] = {field_name: kwargs.pop(field_name) for field_name in set(kwargs.keys()) & self.get_proxy_field_names()}
+        proxy_fields: dict[str, Any] = {field_name: kwargs.pop(field_name) for field_name in set(kwargs.keys()) & self.get_proxy_field_names()}  # TODO: Fix code smell
 
         super().__init__(*args, **kwargs)
 
@@ -70,7 +70,7 @@ class CustomBaseModel(Model):
         unexpected_kwargs: set[str] = set()
 
         field_name: str
-        for field_name in set(kwargs.keys()) - self.get_proxy_field_names():
+        for field_name in set(kwargs.keys()) - self.get_proxy_field_names():  # TODO: Fix code smell
             try:
                 # noinspection PyUnresolvedReferences
                 self._meta.get_field(field_name)
